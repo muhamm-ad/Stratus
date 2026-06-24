@@ -1,0 +1,10 @@
+{
+    "aws": {
+        "sso_start_url": "",
+        "sso_region": "",
+        "default_region": "",
+        "preferred_role": "StratusRole"
+    },
+    "azure": {},
+    "gcp": {}
+}
