@@ -1,0 +1,51 @@
+// Package connectors wires concrete cloud connectors together behind a small
+// registry. It does not embed or parse configuration and it is not the place
+// where config.json is read (it cannot embed the central file anyway, since
+// that file lives in a sibling package, not a subdirectory). Instead, main
+// parses each provider's section, constructs each connector, and registers the
+// ready-to-use instances here.
+package core
+
+import (
+	"sort"
+	"sync"
+)
+
+// Registry maps provider IDs to constructed connectors. It is safe for
+// concurrent use.
+type Registry struct {
+	mu sync.RWMutex
+	m  map[ProviderID]ProviderConnector
+}
+
+// NewRegistry returns an empty registry.
+func NewRegistry() *Registry {
+	return &Registry{m: make(map[ProviderID]ProviderConnector)}
+}
+
+// Register adds (or replaces) a connector under its own ID.
+func (r *Registry) Register(c ProviderConnector) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.m[c.ID()] = c
+}
+
+// Get returns the connector for id, and whether it was found.
+func (r *Registry) Get(id ProviderID) (ProviderConnector, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	c, ok := r.m[id]
+	return c, ok
+}
+
+// IDs returns the registered provider IDs in a stable, sorted order.
+func (r *Registry) IDs() []ProviderID {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	ids := make([]ProviderID, 0, len(r.m))
+	for id := range r.m {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	return ids
+}

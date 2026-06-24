@@ -1,5 +1,5 @@
 // Package core defines the provider-agnostic domain model and the
-// CloudConnector contract that every cloud provider (AWS, Azure, GCP)
+// ProviderConnector contract that every cloud provider (AWS, Azure, GCP)
 // implements. It must not import any provider-specific package: the
 // dependency direction is always connectors -> core, never the reverse.
 package core
@@ -15,10 +15,10 @@ const (
 	ProviderGCP   ProviderID = "gcp"
 )
 
-// CloudConnector is the contract implemented by every provider. The UI and
+// ProviderConnector is the contract implemented by every provider. The UI and
 // orchestration layers depend only on this interface, so adding a new cloud
 // means adding a new implementation, not touching callers.
-type CloudConnector interface {
+type ProviderConnector interface {
 	// ID returns the provider this connector talks to.
 	ID() ProviderID
 
