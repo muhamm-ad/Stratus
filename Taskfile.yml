@@ -1,0 +1,38 @@
+version: "3"
+
+tasks:
+  dev:
+    desc: Launch the application in development mode (hot reload)
+    dir: src
+    cmds:
+      - wails dev
+
+  build:
+    desc: Build the desktop binary
+    dir: src
+    cmds:
+      - wails build
+
+  cli:
+    desc: Build the CLI
+    dir: src
+    cmds:
+      - go build -o ../bin/stratus-cli ./cmd/stratus-cli
+
+  lint:
+    desc: Run linters
+    dir: src
+    cmds:
+      - golangci-lint run ./...
+
+  test:
+    desc: Run tests
+    dir: src
+    cmds:
+      - go test ./...
+
+  fmt:
+    desc: Format code
+    dir: src
+    cmds:
+      - gofumpt -w .

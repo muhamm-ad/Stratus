@@ -1,0 +1,23 @@
+
+# Go
+/bin/
+/src/build/bin/
+*.exe
+*.test
+*.out
+
+# Frontend / Node
+/src/frontend/node_modules/
+/src/frontend/dist/
+
+# Environnement et secrets
+.env
+.env.local
+*.pem
+credentials
+
+# OS et éditeurs
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
