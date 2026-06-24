@@ -1,8 +1,6 @@
-<p align="center">
-  <img src="imgs/stratus-mark.svg" alt="Stratus mark" width="72" />
-</p>
+<div align="center">
 
-# Stratus
+<img src="imgs/stratus-wordmark-314w.png" alt="Stratus wordmark" width="314" />
 
 **A multi-cloud gateway to your virtual machines.** Authenticate once, see all your VMs across AWS, Azure and GCP according to your permissions, and connect in a single click.
 
@@ -10,6 +8,8 @@
 ![go](https://img.shields.io/badge/Go-1.25+-00ADD8)
 ![wails](https://img.shields.io/badge/Wails-v2-DF0000)
 ![license](https://img.shields.io/badge/license-MIT-green)
+
+</div>
 
 ---
 
@@ -68,6 +68,7 @@ To build the production binary: `wails build` (or `task build`).
 ```
 stratus/
 ├── docs/          # documentation (requirements, guides, design)
+├── imgs/          # brand assets (wordmark, mark, app icons)
 ├── src/           # Go module + Wails project
 │   ├── core/      # business logic (auth, inventory, session, audit)
 │   ├── connectors/# one package per provider (aws, azure, gcp)

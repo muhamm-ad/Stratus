@@ -21,3 +21,4 @@ credentials
 .idea/
 .vscode/*
 !.vscode/extensions.json
+node_modules/
