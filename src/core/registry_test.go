@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-// fakeConnector is a minimal ProviderConnector for registry tests.
+// fakeConnector is a minimal CloudConnector for registry tests.
 type fakeConnector struct{ id ProviderID }
 
-func (f fakeConnector) ID() ProviderID         { return f.id }
+func (f fakeConnector) ID() ProviderID              { return f.id }
 func (f fakeConnector) Login(context.Context) error { return nil }
 func (f fakeConnector) IsAuthenticated() bool       { return false }
 func (f fakeConnector) ListAccounts(context.Context) ([]Account, error) {
@@ -33,7 +33,6 @@ func TestRegistry_RegisterAndGet(t *testing.T) {
 	if got.ID() != ProviderAWS {
 		t.Errorf("got id %q, want %q", got.ID(), ProviderAWS)
 	}
-
 	if _, ok := r.Get(ProviderGCP); ok {
 		t.Error("did not expect a GCP connector")
 	}

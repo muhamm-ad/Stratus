@@ -1,9 +1,3 @@
-// Package connectors wires concrete cloud connectors together behind a small
-// registry. It does not embed or parse configuration and it is not the place
-// where config.json is read (it cannot embed the central file anyway, since
-// that file lives in a sibling package, not a subdirectory). Instead, main
-// parses each provider's section, constructs each connector, and registers the
-// ready-to-use instances here.
 package core
 
 import (
@@ -11,8 +5,12 @@ import (
 	"sync"
 )
 
-// Registry maps provider IDs to constructed connectors. It is safe for
-// concurrent use.
+// Registry maps provider IDs to already-constructed connectors. It is safe for
+// concurrent use (Wails calls in from multiple goroutines).
+//
+// It lives in core because it only ever references core types (ProviderConnector,
+// ProviderID); keeping it here means provider packages depend on a single
+// package (core) and never on each other or on a "providers" parent package.
 type Registry struct {
 	mu sync.RWMutex
 	m  map[ProviderID]ProviderConnector
