@@ -70,7 +70,15 @@ func (p *Provider) loginAuthCode(ctx context.Context) (*Token, error) {
 		return nil, fmt.Errorf("aws: register client: %w", err)
 	}
 
-	authURL := buildAuthorizeURL(aws.ToString(reg.AuthorizationEndpoint), authorizeParams{
+	// IAM Identity Center does NOT populate reg.AuthorizationEndpoint (it comes
+	// back nil); the authorize URL is constructed from the region, exactly as
+	// the AWS CLI does. We still prefer the returned value if AWS ever starts
+	// sending one.
+	authEndpoint := aws.ToString(reg.AuthorizationEndpoint)
+	if authEndpoint == "" {
+		authEndpoint = defaultAuthorizeEndpoint(p.cfg.SSORegion)
+	}
+	authURL := buildAuthorizeURL(authEndpoint, authorizeParams{
 		ClientID:    aws.ToString(reg.ClientId),
 		RedirectURI: redirectURI,
 		State:       state,
@@ -233,6 +241,16 @@ func buildAuthorizeURL(endpoint string, p authorizeParams) string {
 		q.Set("scopes", p.Scope)
 	}
 	return endpoint + "?" + q.Encode()
+}
+
+// defaultAuthorizeEndpoint returns the IAM Identity Center OIDC authorize
+// endpoint for a region. IAM Identity Center leaves RegisterClient's
+// authorizationEndpoint field empty, so the authorize URL is built from the
+// region — the same thing the AWS CLI does. The token endpoint needs no such
+// handling: CreateToken goes through the SDK client, which resolves
+// https://oidc.<region>.amazonaws.com/token on its own.
+func defaultAuthorizeEndpoint(region string) string {
+	return fmt.Sprintf("https://oidc.%s.amazonaws.com/authorize", region)
 }
 
 func maxInt(a, b int) int {
