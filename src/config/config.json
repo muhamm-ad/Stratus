@@ -1,10 +1,21 @@
 {
-    "aws": {
-        "sso_start_url": "",
-        "sso_region": "",
-        "default_region": "",
-        "preferred_role": "StratusRole"
+    "identity": {
+        "entra": {
+            "tenant_id": "",
+            "client_id": ""
+        }
     },
-    "azure": {},
-    "gcp": {}
+    "providers": {
+        "aws": {
+            "role_arn": "",
+            "region": ""
+        },
+        "azure": {
+            "subscription_id": "",
+            "arm_scope": "https://management.azure.com/.default"
+        },
+        "gcp": {
+            "workforce_audience": ""
+        }
+    }
 }

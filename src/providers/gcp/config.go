@@ -1,3 +1,44 @@
 package gcp
 
-// TODO: Add config implementation for GCP
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+)
+
+// GCPConfig holds GCP Workforce Identity Federation settings.
+type GCPConfig struct {
+	// WorkforceAudience is the STS audience, e.g.
+	// //iam.googleapis.com/locations/global/workforcePools/POOL/providers/PROV
+	WorkforceAudience string `json:"workforce_audience"`
+	// Scope defaults to cloud-platform when empty.
+	Scope string `json:"scope,omitempty"`
+}
+
+const (
+	EnvAudience  = "STRATUS_GCP_WORKFORCE_AUDIENCE"
+	DefaultScope = "https://www.googleapis.com/auth/cloud-platform"
+)
+
+func ParseConfig(raw json.RawMessage, getenv func(string) string) (GCPConfig, error) {
+	var c GCPConfig
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &c); err != nil {
+			return c, fmt.Errorf("gcp: invalid config section: %w", err)
+		}
+	}
+	if v := getenv(EnvAudience); v != "" {
+		c.WorkforceAudience = v
+	}
+	if c.Scope == "" {
+		c.Scope = DefaultScope
+	}
+	return c, c.Validate()
+}
+
+func (c GCPConfig) Validate() error {
+	if strings.TrimSpace(c.WorkforceAudience) == "" {
+		return fmt.Errorf("gcp: incomplete configuration, missing: workforce_audience")
+	}
+	return nil
+}

@@ -22,22 +22,17 @@ type ProviderConnector interface {
 	// ID returns the provider this connector talks to.
 	ID() ProviderID
 
-	// Login runs the interactive authentication flow (it may open the system
-	// browser). It returns when a usable session is established, the user
-	// cancels, or ctx is cancelled.
-	Login(ctx context.Context) error
+	// Authenticate dérive les identifiants du provider à partir de l'identité
+	// déjà établie. Aucun navigateur : appel HTTPS silencieux.
+	Authenticate(ctx context.Context, idp IdentityProvider) error
 
 	// IsAuthenticated reports whether a non-expired session currently exists.
 	IsAuthenticated() bool
 
-	// ListAccounts returns the accounts/entitlements the authenticated user
-	// can access. Requires a prior successful Login.
-	ListAccounts(ctx context.Context) ([]Account, error)
-
-	// ListInstances returns the connectable instances for one account.
+	// ListInstances returns the connectable vms for one account.
 	ListInstances(ctx context.Context, accountID string) ([]Instance, error)
 
-	// Connect opens an interactive session to a single instance.
+	// Connect opens an interactive session to a single vms.
 	Connect(ctx context.Context, req ConnectRequest) (Session, error)
 
 	// Logout clears tokens and any cached credentials.

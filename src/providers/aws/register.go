@@ -2,28 +2,19 @@ package aws
 
 import (
 	"encoding/json"
-	"fmt"
+	"os"
 
 	"github.com/muhamm-ad/stratus/core"
 )
 
-// Register builds the AWS connector from its configuration section and adds it
-// to the registry. Called once at startup from app.go:
-//
-//	secs, _ := config.Load()
-//	err := aws.Register(app.registry, secs.AWS)
-//
-// Passing the section (rather than loading config here) keeps this package
-// decoupled from the config package and lets app.go load config.json once.
-func Register(reg *core.Registry, raw json.RawMessage, opts ...Option) error {
-	cfg, err := ParseConfig(raw)
-	if err != nil {
-		return fmt.Errorf("aws: %w", err)
-	}
-	provider, err := NewProvider(cfg, opts...)
-	if err != nil {
-		return fmt.Errorf("aws: %w", err)
-	}
-	reg.Register(provider)
-	return nil
+// init registers the AWS connector factory in the global catalog. The app
+// enables it via a blank import of providers/all.
+func init() {
+	core.RegisterProvider(core.ProviderAWS, func(raw json.RawMessage) (core.ProviderConnector, error) {
+		cfg, err := ParseConfig(raw, os.Getenv)
+		if err != nil {
+			return nil, err
+		}
+		return New(cfg), nil
+	})
 }

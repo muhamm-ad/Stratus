@@ -3,71 +3,45 @@ package aws
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 )
 
-// Config holds the (non-secret) AWS SSO settings. None of these are sensitive:
-// a public OAuth client cannot hold a usable secret, so security comes from
-// PKCE plus the user's own IdP authentication, not from any value here.
+// Config holds the AWS web-identity settings. None are secret.
 type Config struct {
-	SSOStartURL   string `json:"sso_start_url"`
-	SSORegion     string `json:"sso_region"`
-	DefaultRegion string `json:"default_region"`
-	PreferredRole string `json:"preferred_role,omitempty"`
+	RoleArn string `json:"role_arn"`
+	Region  string `json:"region"`
 }
 
-// Environment variable names that override embedded values (dev / CI / tests).
 const (
-	EnvStartURL      = "STRATUS_AWS_SSO_START_URL"
-	EnvSSORegion     = "STRATUS_AWS_SSO_REGION"
-	EnvDefaultRegion = "STRATUS_AWS_DEFAULT_REGION"
-	EnvPreferredRole = "STRATUS_AWS_PREFERRED_ROLE"
+	EnvRoleArn = "STRATUS_AWS_ROLE_ARN"
+	EnvRegion  = "STRATUS_AWS_REGION"
 )
 
-// ParseConfig builds an AWS Config from this provider's section of the central
-// configuration (see package config). The section is the single source of
-// truth; environment variables then override individual fields for dev/CI.
-// Resolution is last-writer-wins:
-//
-//	embedded section  ->  environment variables
-//
-// The connector owns its own schema, parsing, and validation here, so the
-// config package never needs to import this one.
-func ParseConfig(raw json.RawMessage) (Config, error) {
+// ParseConfig builds an AWS Config from this provider's config section, with
+// env overrides. The aws package owns this schema; config never sees it.
+func ParseConfig(raw json.RawMessage, getenv func(string) string) (Config, error) {
 	var c Config
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &c); err != nil {
 			return c, fmt.Errorf("aws: invalid config section: %w", err)
 		}
 	}
-
-	if v := os.Getenv(EnvStartURL); v != "" {
-		c.SSOStartURL = v
+	if v := getenv(EnvRoleArn); v != "" {
+		c.RoleArn = v
 	}
-	if v := os.Getenv(EnvSSORegion); v != "" {
-		c.SSORegion = v
+	if v := getenv(EnvRegion); v != "" {
+		c.Region = v
 	}
-	if v := os.Getenv(EnvDefaultRegion); v != "" {
-		c.DefaultRegion = v
-	}
-	if v := os.Getenv(EnvPreferredRole); v != "" {
-		c.PreferredRole = v
-	}
-
-	return c, c.validate()
+	return c, c.Validate()
 }
 
-func (c Config) validate() error {
+func (c Config) Validate() error {
 	var missing []string
-	if c.SSOStartURL == "" {
-		missing = append(missing, "sso_start_url")
+	if c.RoleArn == "" {
+		missing = append(missing, "role_arn")
 	}
-	if c.SSORegion == "" {
-		missing = append(missing, "sso_region")
-	}
-	if c.DefaultRegion == "" {
-		missing = append(missing, "default_region")
+	if c.Region == "" {
+		missing = append(missing, "region")
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("aws: incomplete configuration, missing: %s", strings.Join(missing, ", "))
