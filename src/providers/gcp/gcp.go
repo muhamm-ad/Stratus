@@ -22,7 +22,7 @@ const defaultSTSEndpoint = "https://sts.googleapis.com/v1/token"
 
 // Provider implements core.ProviderConnector for GCP.
 type Provider struct {
-	cfg         GCPConfig
+	cfg         Config
 	httpClient  *http.Client
 	stsEndpoint string
 	now         func() time.Time
@@ -38,7 +38,7 @@ func WithHTTPClient(c *http.Client) Option { return func(p *Provider) { p.httpCl
 func WithSTSEndpoint(url string) Option    { return func(p *Provider) { p.stsEndpoint = url } }
 func WithClock(f func() time.Time) Option  { return func(p *Provider) { p.now = f } }
 
-func New(cfg GCPConfig, opts ...Option) *Provider {
+func New(cfg Config, opts ...Option) *Provider {
 	p := &Provider{cfg: cfg, httpClient: http.DefaultClient, stsEndpoint: defaultSTSEndpoint, now: time.Now}
 	for _, opt := range opts {
 		opt(p)

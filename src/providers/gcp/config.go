@@ -6,8 +6,8 @@ import (
 	"strings"
 )
 
-// GCPConfig holds GCP Workforce Identity Federation settings.
-type GCPConfig struct {
+// Config holds GCP Workforce Identity Federation settings.
+type Config struct {
 	// WorkforceAudience is the STS audience, e.g.
 	// //iam.googleapis.com/locations/global/workforcePools/POOL/providers/PROV
 	WorkforceAudience string `json:"workforce_audience"`
@@ -20,8 +20,8 @@ const (
 	DefaultScope = "https://www.googleapis.com/auth/cloud-platform"
 )
 
-func ParseConfig(raw json.RawMessage, getenv func(string) string) (GCPConfig, error) {
-	var c GCPConfig
+func ParseConfig(raw json.RawMessage, getenv func(string) string) (Config, error) {
+	var c Config
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &c); err != nil {
 			return c, fmt.Errorf("gcp: invalid config section: %w", err)
@@ -36,7 +36,7 @@ func ParseConfig(raw json.RawMessage, getenv func(string) string) (GCPConfig, er
 	return c, c.Validate()
 }
 
-func (c GCPConfig) Validate() error {
+func (c Config) Validate() error {
 	if strings.TrimSpace(c.WorkforceAudience) == "" {
 		return fmt.Errorf("gcp: incomplete configuration, missing: workforce_audience")
 	}

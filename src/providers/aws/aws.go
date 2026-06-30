@@ -41,7 +41,11 @@ func WithClock(f func() time.Time) Option { return func(p *Provider) { p.now = f
 
 // New builds an AWS connector.
 func New(cfg Config, opts ...Option) *Provider {
-	p := &Provider{cfg: cfg, newSTS: defaultAssumer, now: time.Now}
+	p := &Provider{
+		cfg:    cfg,
+		newSTS: defaultAssumer,
+		now:    time.Now,
+	}
 	for _, opt := range opts {
 		opt(p)
 	}

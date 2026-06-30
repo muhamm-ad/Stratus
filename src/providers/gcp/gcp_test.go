@@ -28,7 +28,7 @@ func TestAuthenticate_TokenExchange(t *testing.T) {
 	defer srv.Close()
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
-	p := New(GCPConfig{WorkforceAudience: "//iam.googleapis.com/x", Scope: DefaultScope}, WithHTTPClient(srv.Client()), WithSTSEndpoint(srv.URL), WithClock(func() time.Time { return now }))
+	p := New(Config{WorkforceAudience: "//iam.googleapis.com/x", Scope: DefaultScope}, WithHTTPClient(srv.Client()), WithSTSEndpoint(srv.URL), WithClock(func() time.Time { return now }))
 
 	if err := p.Authenticate(context.Background(), fakeIDP{idToken: "ENTRA_JWT"}); err != nil {
 		t.Fatalf("authenticate: %v", err)
