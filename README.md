@@ -30,7 +30,7 @@ Stratus is a desktop application (Linux, macOS, Windows) shipped as a single bin
 
 ## Architecture
 
-Stratus separates a UI-independent core, connectors (one per provider, each implementing a common `CloudConnector` interface), and two frontends: the Wails graphical interface and the CLI. VM discovery goes through the official cloud SDKs; connection is delegated to the providers' native CLIs. The full detail is in [`docs/requirements-specification.md`](docs/requirements-specification.md).
+Stratus separates a UI-independent core, connectors (one per provider, each implementing a common `ProviderConnector` interface), and two frontends: the Wails graphical interface and the CLI. VM discovery goes through the official cloud SDKs; connection is delegated to the providers' native CLIs. The full detail is in [`docs/requirements-specification.md`](docs/requirements-specification.md).
 
 ## Tech stack
 
@@ -79,7 +79,7 @@ stratus/
 
 ## Roadmap
 
-- **Milestone 0** — Go + Wails foundation, `CloudConnector` interface, loopback authentication server.
+- **Milestone 0** — Go + Wails foundation, `ProviderConnector` interface, loopback authentication server.
 - **Milestone 1** — AWS MVP: IAM Identity Center SSO, EC2 inventory, SSM connection.
 - **Milestone 2** — Azure connector (Entra ID, Bastion/SSH).
 - **Milestone 3** — GCP connector (OAuth, IAP).

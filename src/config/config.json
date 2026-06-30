@@ -1,0 +1,21 @@
+{
+    "identity": {
+        "entra": {
+            "tenant_id": "",
+            "client_id": ""
+        }
+    },
+    "providers": {
+        "aws": {
+            "role_arn": "",
+            "region": ""
+        },
+        "azure": {
+            "subscription_id": "",
+            "arm_scope": "https://management.azure.com/.default"
+        },
+        "gcp": {
+            "workforce_audience": ""
+        }
+    }
+}

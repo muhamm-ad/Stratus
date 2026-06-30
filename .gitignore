@@ -22,3 +22,6 @@ credentials
 .vscode/*
 !.vscode/extensions.json
 node_modules/
+
+# Other
+drafts/*
