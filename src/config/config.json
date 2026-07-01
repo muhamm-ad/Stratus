@@ -15,7 +15,8 @@
             "arm_scope": "https://management.azure.com/.default"
         },
         "gcp": {
-            "workforce_audience": ""
+            "workforce_audience": "",
+            "project_id": ""
         }
     }
 }

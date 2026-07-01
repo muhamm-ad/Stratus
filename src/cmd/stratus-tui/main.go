@@ -2,7 +2,7 @@
 // It assembles the shared service via bootstrap (the same wiring the desktop
 // app uses) and runs the Bubble Tea program.
 //
-//	go run ./cmd/stratus-cli-cli
+//	go run ./cmd/stratus-tui
 //
 // Configure identity + providers in config/config.json, or via the STRATUS_*
 // environment variables.
