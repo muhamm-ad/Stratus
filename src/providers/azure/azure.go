@@ -84,7 +84,7 @@ func (p *Provider) Logout(ctx context.Context) error {
 	return nil
 }
 
-// --- Phase 3: ListInstances via ARM REST ---
+// ListInstances via ARM REST ---
 
 type armVMListResponse struct {
 	Value    []armVM `json:"value"`
@@ -126,7 +126,7 @@ type armStatus struct {
 
 // ListInstances lists all VMs under the configured subscription using the ARM API.
 // It requests instanceView in a single call to get power state without an extra round-trip.
-func (p *Provider) ListInstances(ctx context.Context, _ string) ([]core.Instance, error) {
+func (p *Provider) ListInstances(ctx context.Context, accountID string) ([]core.Instance, error) {
 	p.mu.Lock()
 	token := p.token
 	p.mu.Unlock()
@@ -151,7 +151,7 @@ func (p *Provider) ListInstances(ctx context.Context, _ string) ([]core.Instance
 
 		resp, err := p.httpClient.Do(req)
 		if err != nil {
-			return nil, fmt.Errorf("azure: list VMs request: %w", err)
+	return nil, fmt.Errorf("azure: list VMs request: %w", err)
 		}
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 		resp.Body.Close()
@@ -220,3 +220,12 @@ func (p *Provider) Connect(ctx context.Context, req core.ConnectRequest) (core.S
 }
 
 var _ core.ProviderConnector = (*Provider)(nil)
+
+// AcceptsIssuer implements core.IdentityConstraint. Azure Resource Manager only
+// accepts Microsoft Entra ID tokens, so Azure can be reached only when the
+// active identity is an Entra issuer (which may itself federate an upstream IdP
+// such as Okta). A token from another issuer cannot obtain ARM access.
+func (p *Provider) AcceptsIssuer(issuer string) bool {
+	return strings.Contains(issuer, "login.microsoftonline.com") ||
+		strings.Contains(issuer, "sts.windows.net")
+}

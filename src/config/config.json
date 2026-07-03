@@ -1,8 +1,20 @@
 {
     "identity": {
         "entra": {
-            "tenant_id": "",
-            "client_id": ""
+            "issuer": "https://login.microsoftonline.com/<tenant-id>/v2.0",
+            "client_id": "<entra-app-id>"
+        },
+        "okta": {
+            "issuer": "https://<domain>.okta.com/oauth2/default",
+            "client_id": "<okta-app-id>"
+        },
+        "keycloak": {
+            "issuer": "https://<host>/realms/<realm>",
+            "client_id": "<kc-client-id>"
+        },
+        "auth0": {
+            "issuer": "https://<tenant>.<region>.auth0.com/",
+            "client_id": "<auth0-app-id>"
         }
     },
     "providers": {

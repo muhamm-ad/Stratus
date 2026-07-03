@@ -5,14 +5,12 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/muhamm-ad/stratus/bootstrap"
 	"github.com/muhamm-ad/stratus/core"
 	"github.com/muhamm-ad/stratus/service"
 )
 
 // App is the Wails-bound desktop adapter. It holds NO orchestration logic — it
-// delegates everything to *service.Service, the same shared logic the CLI
-// (cmd/stratus-cli) uses. Both UIs differ only in presentation.
+// delegates to *service.Service.
 type App struct {
 	ctx context.Context
 	svc *service.Service
@@ -23,10 +21,9 @@ func NewApp() *App { return &App{} }
 // startup is called by Wails with the application context.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-
-	svc, warnings, err := bootstrap.New() // same assembly the CLI calls
+	svc, warnings, err := service.Init()
 	if err != nil {
-		panic(fmt.Sprintf("bootstrap: %v", err))
+		panic(fmt.Sprintf("service initialization: %v", err))
 	}
 	for _, w := range warnings {
 		fmt.Printf("provider unavailable: %v\n", w) // incomplete config → skipped
@@ -34,8 +31,18 @@ func (a *App) startup(ctx context.Context) {
 	a.svc = svc
 }
 
-// ── Methods bound to the React frontend (thin delegation) ───────────────────
+// ── Identity choice for single sign-on (bound to the frontend) ──────────────
 
+// IdentityProviders lists the configured OIDC providers (e.g. "entra","okta").
+func (a *App) IdentityProviders() []string { return a.svc.IdentityProviders() }
+
+// LoginWith signs in using the chosen provider (browser once).
+func (a *App) LoginWith(name string) error { return a.svc.LoginWith(a.ctx, name) }
+
+// ActiveIdentity returns the signed-in provider name, or "".
+func (a *App) ActiveIdentity() string { return a.svc.ActiveIdentity() }
+
+// Login is a convenience for the single-provider case.
 func (a *App) Login() error          { return a.svc.Login(a.ctx) }
 func (a *App) IsAuthenticated() bool { return a.svc.IsAuthenticated() }
 func (a *App) Logout() error         { return a.svc.Logout(a.ctx) }
@@ -49,8 +56,7 @@ func (a *App) Providers() []string {
 	return out
 }
 
-// ConnectProvider derives a provider's credentials from the Entra session —
-// silent, no browser. Call after Login().
+// ConnectProvider derives a provider's credentials from the active identity.
 func (a *App) ConnectProvider(id string) error {
 	return a.svc.Connect(a.ctx, core.ProviderID(id))
 }
@@ -64,7 +70,7 @@ type VMData struct {
 	Region       string   `json:"region"`
 	State        string   `json:"state"`
 	Platform     string   `json:"platform"`
-	InstanceType string   `json:"size"`       // "size" matches the UI column label
+	InstanceType string   `json:"size"` // "size" matches the UI column label
 	PrivateIP    string   `json:"privateIP"`
 	PublicIP     string   `json:"publicIP"`
 	OSUser       string   `json:"osUser"`

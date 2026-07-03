@@ -24,7 +24,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	p := tea.NewProgram(New(svc, warnings), tea.WithAltScreen())
+	p := tea.NewProgram(New(svc, warnings), tea.WithAltScreen(), tea.WithMouseAllMotion())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "stratus: %v\n", err)
 		os.Exit(1)
