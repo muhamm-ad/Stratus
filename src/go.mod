@@ -1,29 +1,47 @@
 module github.com/muhamm-ad/stratus
 
-go 1.24
+go 1.25.0
 
 require github.com/wailsapp/wails/v2 v2.12.0
 
 require (
+	// ---- Cloud credential exchange (first-party helpers) ----
 	github.com/aws/aws-sdk-go-v2 v1.42.0
-	github.com/aws/aws-sdk-go-v2/service/ec2 v1.310.0
+	github.com/aws/aws-sdk-go-v2/config v1.27.27
+	github.com/aws/aws-sdk-go-v2/credentials v1.17.27 // stscreds.NewWebIdentityRoleProvider
 	github.com/aws/aws-sdk-go-v2/service/sts v1.43.4
+
+	// ---- TUI (add when wiring internal/tui) ----
 	github.com/charmbracelet/bubbles v0.20.0
 	github.com/charmbracelet/bubbletea v1.3.4
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
-	github.com/zalando/go-keyring v0.2.5
+	// charm.land/bubbletea/v2 v2.0.6
+	// charm.land/bubbles/v2   v2.0.0
+	// charm.land/lipgloss/v2  v2.0.0
+
+	// ---- OIDC / OAuth2 (replaces hand-rolled PKCE, loopback, discovery, token POSTs) ----
+	github.com/coreos/go-oidc/v3 v3.17.0 // discovery + id_token verification (JWKS)
+	github.com/int128/oauth2cli v1.15.0 // RFC 8252 browser + loopback dance   (verify latest)
+	github.com/zalando/go-keyring v0.2.6 // token persistence in the OS keychain
+	golang.org/x/oauth2 v0.36.0 // PKCE, grants, auto-refresh, device flow (RFC 8628), google/externalaccount
+	// GCP externalaccount lives inside golang.org/x/oauth2/google/externalaccount (no extra module).
+	// Azure: NO new dependency — the ARM token is derived from the shared Entra
+	// session via auth.RefreshGrant (x/oauth2 can't send a scope on refresh).
 )
 
 require (
+	al.essio.dev/pkg/shellescape v1.5.1 // indirect
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
-	github.com/alessio/shellescape v1.4.1 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.11 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.29 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.29 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.0 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.30 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.12 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.29 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.22.4 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.26.4 // indirect
 	github.com/aws/smithy-go v1.27.1 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bep/debounce v1.2.1 // indirect
@@ -31,12 +49,14 @@ require (
 	github.com/charmbracelet/x/ansi v0.8.0 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.13-0.20250311204145-2c3ea96c31dd // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect
-	github.com/danieljoos/wincred v1.2.0 // indirect
+	github.com/danieljoos/wincred v1.2.2 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
+	github.com/go-jose/go-jose/v4 v4.1.3 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
+	github.com/int128/listener v1.2.0 // indirect
 	github.com/jchv/go-winloader v0.0.0-20210711035445-715c2860da7e // indirect
 	github.com/labstack/echo/v4 v4.13.3 // indirect
 	github.com/labstack/gommon v0.4.2 // indirect
@@ -52,6 +72,7 @@ require (
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
+	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/samber/lo v1.49.1 // indirect

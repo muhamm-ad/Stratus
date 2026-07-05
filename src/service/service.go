@@ -1,7 +1,8 @@
 // Package service is the shared application layer of Stratus. Both user
 // interfaces — the Wails/React desktop UI and the CLI/TUI — call into it;
-// neither duplicates orchestration. It depends ONLY on core interfaces; the
-// concrete identity providers and connectors are injected see import statements.
+// neither duplicates orchestration. Init() (formerly the bootstrap package) is
+// the single assembly point; the Service methods themselves stay provider-
+// agnostic and act only through core interfaces.
 package service
 
 import (
@@ -22,19 +23,20 @@ import (
 // configured identity providers (all OIDC) and the cloud connectors. Exactly
 // one identity provider is "active" at a time — the one the user signed in with.
 type Service struct {
-	idps          map[string]core.IdentityProvider
-	activeIdpName string // config key of the signed-in provider; "" = none
-	registry      *core.Registry
+	idps       map[string]core.IdentityProvider
+	active     core.IdentityProvider
+	activeName string
+	registry   *core.Registry
 }
 
-// New builds a Service from the configured identity providers and the connector
-// registry. When exactly one identity provider is configured it becomes active
-// automatically (no choice to make).
+// NewService builds a Service from the configured identity providers and the
+// connector registry. When exactly one identity provider is configured it
+// becomes active automatically (no choice to make).
 func NewService(idps map[string]core.IdentityProvider, registry *core.Registry) *Service {
 	s := &Service{idps: idps, registry: registry}
 	if len(idps) == 1 {
-		for name := range idps {
-			s.activeIdpName = name
+		for name, idp := range idps {
+			s.active, s.activeName = idp, name
 		}
 	}
 	return s
@@ -52,59 +54,53 @@ func (s *Service) IdentityProviders() []string {
 }
 
 // ActiveIdentity returns the name of the signed-in identity provider, or "".
-func (s *Service) ActiveIdentity() string { return s.activeIdpName }
+func (s *Service) ActiveIdentity() string { return s.activeName }
 
 // LoginWith signs in using a named identity provider (browser once) and makes
-// it active.
-func (s *Service) LoginWith(ctx context.Context, name string) error {
+// it active. onCode is called only if the device flow is used (may be nil).
+func (s *Service) LoginWith(ctx context.Context, name string, onCode func(core.DeviceCode)) error {
 	idp, ok := s.idps[name]
 	if !ok {
 		return fmt.Errorf("service: unknown identity provider %q", name)
 	}
-	if err := idp.Login(ctx); err != nil {
+	if err := idp.Login(ctx, onCode); err != nil {
 		return err
 	}
-	s.activeIdpName = name
+	s.active, s.activeName = idp, name
 	return nil
 }
 
 // Login is a convenience for the common single-provider case. With several
 // providers configured it returns an error asking the caller to use LoginWith.
-func (s *Service) Login(ctx context.Context) error {
+func (s *Service) Login(ctx context.Context, onCode func(core.DeviceCode)) error {
 	switch len(s.idps) {
 	case 0:
 		return errors.New("service: no identity provider configured")
 	case 1:
-		return s.LoginWith(ctx, s.IdentityProviders()[0])
+		return s.LoginWith(ctx, s.IdentityProviders()[0], onCode)
 	default:
 		return fmt.Errorf("service: multiple identity providers (%v) — use LoginWith", s.IdentityProviders())
 	}
 }
 
 func (s *Service) IsAuthenticated() bool {
-	idp, err := s.activeIDP()
-	return err == nil && idp.IsAuthenticated()
+	return s.active != nil && s.active.IsAuthenticated()
 }
 
 func (s *Service) Logout(ctx context.Context) error {
-	idp, err := s.activeIDP()
-	if err != nil {
+	if s.active == nil {
 		return nil
 	}
-	err = idp.Logout(ctx)
-	s.activeIdpName = ""
+	err := s.active.Logout(ctx)
+	s.active, s.activeName = nil, ""
 	return err
 }
 
-func (s *Service) activeIDP() (core.IdentityProvider, error) {
-	if s.activeIdpName == "" {
+func (s *Service) requireActive() (core.IdentityProvider, error) {
+	if s.active == nil {
 		return nil, core.ErrNotAuthenticated
 	}
-	idp, ok := s.idps[s.activeIdpName]
-	if !ok {
-		return nil, fmt.Errorf("service: active identity %q not found", s.activeIdpName)
-	}
-	return idp, nil
+	return s.active, nil
 }
 
 // Providers lists the registered cloud-provider IDs.
@@ -122,19 +118,15 @@ func (s *Service) ProviderUsable(id core.ProviderID) bool {
 	if !ok {
 		return true
 	}
-	if s.activeIdpName == "" {
+	if s.active == nil {
 		return true
 	}
-	idp, err := s.activeIDP()
-	if err != nil {
-		return false
-	}
-	return con.AcceptsIssuer(core.IssuerOf(idp))
+	return con.AcceptsIssuer(core.IssuerOf(s.active))
 }
 
 // Connect derives a provider's credentials from the ACTIVE identity (silent).
 func (s *Service) Connect(ctx context.Context, id core.ProviderID) error {
-	idp, err := s.activeIDP()
+	idp, err := s.requireActive()
 	if err != nil {
 		return err
 	}
@@ -143,7 +135,7 @@ func (s *Service) Connect(ctx context.Context, id core.ProviderID) error {
 		return fmt.Errorf("service: unknown provider %q", id)
 	}
 	if con, ok := c.(core.IdentityConstraint); ok && !con.AcceptsIssuer(core.IssuerOf(idp)) {
-		return fmt.Errorf("service: %q requires a Microsoft Entra identity (active identity %q cannot obtain its credentials)", id, s.activeIdpName)
+		return fmt.Errorf("service: %q requires a Microsoft Entra identity (active identity %q cannot obtain its credentials)", id, s.activeName)
 	}
 	return c.Authenticate(ctx, idp)
 }
@@ -168,9 +160,8 @@ func (s *Service) OpenSession(ctx context.Context, id core.ProviderID, req core.
 
 // Init builds the shared Service: one generic OIDC identity provider per
 // configured "identity" entry, plus every registered + configured connector.
-// warnings lists identity/provider sections skipped due to incomplete config
-// (the app still runs with the rest); a non-nil error is fatal (bad config.json
-// or zero usable identity providers).
+// warnings lists sections skipped due to incomplete config (the app still runs
+// with the rest); a non-nil error is fatal (bad config.json or zero identities).
 func Init() (svc *Service, warnings []error, err error) {
 	secs, err := config.Load()
 	if err != nil {
@@ -196,7 +187,7 @@ func Init() (svc *Service, warnings []error, err error) {
 	warnings = append(warnings, provWarn...)
 
 	if len(idps) == 0 {
-		return nil, warnings, fmt.Errorf(`bootstrap: no identity provider configured — fill "identity" in config.json`)
+		return nil, warnings, fmt.Errorf(`service: no identity provider configured — fill "identity" in config.json`)
 	}
 	return NewService(idps, reg), warnings, nil
 }
