@@ -27,8 +27,8 @@
             "arm_scope": "https://management.azure.com/.default"
         },
         "gcp": {
-            "workforce_audience": "",
-            "project_id": ""
+            "workforce_audience": "//iam.googleapis.com/locations/global/workforcePools/POOL/providers/PROVIDER",
+            "workforce_pool_user_project": ""
         }
     }
 }

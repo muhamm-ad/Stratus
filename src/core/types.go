@@ -15,7 +15,7 @@ type Instance struct {
 	Name         string
 	State        string // running, stopped, pending, ...
 	Platform     string // "linux" or "windows"
-	InstanceType string // e.g. t3.large, Standard_D4s_v5, n2-standard-4
+	InstanceType string // machine size, e.g. t3.large / Standard_D4s_v5 / e2-standard-4
 	PrivateIP    string
 	PublicIP     string
 	Region       string
