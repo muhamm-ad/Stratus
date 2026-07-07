@@ -60,3 +60,7 @@ func (p *Provider) Connect(ctx context.Context, req core.ConnectRequest) (core.S
 	return nil, core.ErrNotImplemented // Phase 4
 }
 func (p *Provider) Logout(ctx context.Context) error { p.token, p.ok = "", false; return nil }
+
+func (p *Provider) GetAccount() (string, error) {
+	return p.cfg.WorkforcePoolUserProject, nil
+}

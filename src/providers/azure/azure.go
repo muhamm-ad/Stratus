@@ -71,3 +71,7 @@ func (p *Provider) Logout(ctx context.Context) error {
 	p.mu.Unlock()
 	return nil
 }
+
+func (p *Provider) GetAccount() (string, error) {
+	return p.cfg.SubscriptionID, nil
+}
