@@ -6,7 +6,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/lipgloss/v2"
-	"github.com/muhamm-ad/stratus/service"
 	"github.com/muhamm-ad/stratus/core"
 )
 
@@ -18,8 +17,8 @@ const (
 )
 
 type loginModel struct {
-	gw         service.Gateway
-	idps       []service.IdP
+	gw         Gateway
+	idps       []IdP
 	cursor     int
 	step       loginStep
 	selected   string
@@ -28,7 +27,7 @@ type loginModel struct {
 	err        error
 }
 
-func newLoginModel(gw service.Gateway) loginModel {
+func newLoginModel(gw Gateway) loginModel {
 	sp := spinner.New(spinner.WithSpinner(spinner.Spinner{Frames: SpinnerFrames, FPS: 12}))
 	return loginModel{gw: gw, idps: gw.IdentityProviders(), spinner: sp}
 }
@@ -58,7 +57,7 @@ func (m loginModel) Update(msg tea.KeyPressMsg, send func(tea.Msg)) (loginModel,
 
 func (m loginModel) View(s Styles, w, h int) string {
 	title := s.Title.Render("S T R A T U S")
-	sub := s.Dim.Render("multi-cloud vm gateway · terminal edition")
+	sub := s.Dim.Render("multi-cloud vm gateway")
 	rule := s.Dim.Render(lipgloss.NewStyle().Width(40).Render("────────────────────────────────────────"))
 
 	var inner string
@@ -93,7 +92,8 @@ func (m loginModel) View(s Styles, w, h int) string {
 			label, code, url, wait, s.Dim.Render("esc cancel"))
 	}
 
-	box := s.Box.Render(title + "  " + s.Dim.Render("v0.4.0") + "\n" + sub + "\n" + rule + "\n\n" + inner)
+	// box := s.Box.Render(title + "  " + s.Dim.Render("v0.4.0") + "\n" + sub + "\n" + rule + "\n\n" + inner)
+	box := s.Box.Render(title + "\n" + sub + "\n" + rule + "\n\n" + inner)
 	caption := s.Dim.Render("sign in once · connect aws, azure & gcp from inside the app")
 	block := lipgloss.JoinVertical(lipgloss.Center, box, "", caption)
 	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, block)

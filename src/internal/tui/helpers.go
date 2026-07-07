@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/muhamm-ad/stratus/service"
 )
 
 func cycle(current string, vals ...string) string {
@@ -46,7 +45,7 @@ func formatTags(tags map[string]string) string {
 	return strings.Join(parts, " · ")
 }
 
-func vmMethodLabel(vm service.VM) string {
+func vmMethodLabel(vm VM) string {
 	if vm.Method != "" {
 		return vm.Method
 	}

@@ -1,4 +1,4 @@
-package service
+package tui
 
 import (
 	"context"
@@ -10,11 +10,12 @@ import (
 	"time"
 
 	"github.com/muhamm-ad/stratus/core"
+	"github.com/muhamm-ad/stratus/service"
 )
 
 // Gateway adapts *Service to the TUI-facing Gateway interface.
 type gateway struct {
-	svc      *Service
+	svc      *service.Service
 	accounts map[string]string // provider id -> account/subscription/project
 	sessions []Session
 	audit    []AuditEntry
@@ -23,7 +24,7 @@ type gateway struct {
 }
 
 // NewGateway wraps a configured Service for the TUI.
-func NewGateway(svc *Service) Gateway {
+func NewGateway(svc *service.Service) Gateway {
 	return &gateway{svc: svc, accounts: svc.Accounts()}
 }
 
@@ -31,9 +32,17 @@ func (g *gateway) IdentityProviders() []IdP {
 	names := g.svc.IdentityProviders()
 	out := make([]IdP, len(names))
 	for i, name := range names {
-		out[i] = IdP{Name: name, Description: " — openid connect", Usable: true}
+		out[i] = IdP{Name: name, Description: "Openid connect", Usable: true}
 	}
 	return out
+}
+
+func (g *gateway) ActiveIdentity() (Identity, bool) {
+	name := g.svc.ActiveIdentity()
+	if name == "" || !g.svc.IsAuthenticated() {
+		return Identity{}, false
+	}
+	return g.buildIdentity(name), true
 }
 
 func (g *gateway) LoginWith(ctx context.Context, name string, onCode func(core.DeviceCode)) (Identity, error) {
@@ -65,14 +74,6 @@ func (g *gateway) buildIdentity(idpName string) Identity {
 		}
 	}
 	return id
-}
-
-func (g *gateway) ActiveIdentity() (Identity, bool) {
-	name := g.svc.ActiveIdentity()
-	if name == "" || !g.svc.IsAuthenticated() {
-		return Identity{}, false
-	}
-	return g.buildIdentity(name), true
 }
 
 func (g *gateway) ProviderUsable(provider string) (bool, core.IdentityConstraint) {

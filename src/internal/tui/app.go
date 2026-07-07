@@ -7,7 +7,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/muhamm-ad/stratus/core"
-	"github.com/muhamm-ad/stratus/service"
 )
 
 type screen int
@@ -39,7 +38,7 @@ const (
 // sub-models. Only App implements the full tea.Model (its View returns tea.View);
 // sub-models return plain strings, as recommended for children in Bubble Tea v2.
 type App struct {
-	gw   service.Gateway
+	gw   Gateway
 	send func(tea.Msg) // program.Send, injected after NewProgram
 
 	width, height int
@@ -63,7 +62,7 @@ type App struct {
 
 	flash     string
 	flashKind string // ok|warn|err
-	identity  service.Identity
+	identity  Identity
 	banners   []string // error banners (e.g. gcp session expired)
 
 	searchMode bool
@@ -72,8 +71,8 @@ type App struct {
 	lastG time.Time // for multi-key "gg"
 }
 
-func New(gw service.Gateway) *App {
-	th := Themes[0]
+func New(gw Gateway) *App {
+	th := Themes[2]
 	a := &App{
 		gw:     gw,
 		keys:   DefaultKeys(),
@@ -111,6 +110,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		// Overlays capture keys first.
+		if s := msg.String(); s == "ctrl+c" {
+			return a, tea.Quit
+		}
 		if a.overlay != overlayNone {
 			return a.updateOverlay(msg)
 		}
@@ -214,6 +216,7 @@ func (a *App) View() tea.View {
 	v.AltScreen = true
 	v.BackgroundColor = a.styles.th.Bg
 	v.WindowTitle = "stratus — multi-cloud vm gateway"
+	// v.MouseMode = tea.MouseModeAllMotion
 	return v
 }
 

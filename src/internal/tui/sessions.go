@@ -6,16 +6,15 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/muhamm-ad/stratus/service"
 )
 
 type sessionsModel struct {
-	gw     service.Gateway
-	list   []service.Session
+	gw     Gateway
+	list   []Session
 	cursor int
 }
 
-func newSessionsModel(gw service.Gateway) sessionsModel {
+func newSessionsModel(gw Gateway) sessionsModel {
 	return sessionsModel{gw: gw, list: gw.Sessions()}
 }
 

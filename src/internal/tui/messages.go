@@ -6,26 +6,25 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/muhamm-ad/stratus/core"
-	"github.com/muhamm-ad/stratus/service"
 )
 
 // ---- messages -------------------------------------------------------------
 
 type deviceCodeMsg core.DeviceCode
 type loginResultMsg struct {
-	id  service.Identity
+	id  Identity
 	err error
 }
 type vmsLoadedMsg struct {
 	provider string
-	vms      []service.VM
+	vms      []VM
 }
 type vmsLoadErrMsg struct {
 	provider string
 	err      error
 }
 type providerSyncedMsg struct{ provider string; count int }
-type sessionOpenedMsg struct{ spec service.SessionSpec }
+type sessionOpenedMsg struct{ spec SessionSpec }
 type sessionClosedMsg struct{ id string; err error }
 type flashClearMsg struct{}
 type tokenExpiredMsg struct{ provider string }
@@ -36,7 +35,7 @@ type ggResetMsg struct{}
 
 // loginCmd wraps the blocking OIDC login in a tea.Cmd. The device code is not
 // returned here; it's pushed asynchronously via program.Send inside onCode.
-func loginCmd(gw service.Gateway, name string, send func(tea.Msg)) tea.Cmd {
+func loginCmd(gw Gateway, name string, send func(tea.Msg)) tea.Cmd {
 	return func() tea.Msg {
 		id, err := gw.LoginWith(context.Background(), name, func(dc core.DeviceCode) {
 			send(deviceCodeMsg(dc)) // inject the code into the program from the callback
@@ -47,7 +46,7 @@ func loginCmd(gw service.Gateway, name string, send func(tea.Msg)) tea.Cmd {
 
 // syncProviderCmd loads one provider's VMs after a staggered delay, matching the
 // mockup (aws ~700ms, gcp ~1100ms, azure ~1400ms).
-func syncProviderCmd(gw service.Gateway, provider string, delay time.Duration) tea.Cmd {
+func syncProviderCmd(gw Gateway, provider string, delay time.Duration) tea.Cmd {
 	return tea.Tick(delay, func(time.Time) tea.Msg {
 		vms, err := gw.ListVMs(context.Background(), provider)
 		if err != nil {
@@ -58,7 +57,7 @@ func syncProviderCmd(gw service.Gateway, provider string, delay time.Duration) t
 }
 
 // execSessionCmd hands the terminal to the native CLI, then resumes the TUI.
-func execSessionCmd(spec service.SessionSpec) tea.Cmd {
+func execSessionCmd(spec SessionSpec) tea.Cmd {
 	c := buildExecCmd(spec) // *exec.Cmd, inherits our stdin/stdout/stderr
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		return sessionClosedMsg{id: spec.SessionID, err: err}

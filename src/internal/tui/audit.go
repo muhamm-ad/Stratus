@@ -5,16 +5,15 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/muhamm-ad/stratus/service"
 )
 
 type auditModel struct {
-	gw     service.Gateway
-	list   []service.AuditEntry
+	gw     Gateway
+	list   []AuditEntry
 	cursor int
 }
 
-func newAuditModel(gw service.Gateway) auditModel {
+func newAuditModel(gw Gateway) auditModel {
 	return auditModel{gw: gw, list: gw.AuditLog()}
 }
 

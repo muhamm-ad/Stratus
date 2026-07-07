@@ -8,7 +8,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/table"
 	"charm.land/lipgloss/v2"
-	"github.com/muhamm-ad/stratus/service"
 )
 
 type sortKey int
@@ -23,9 +22,9 @@ const (
 )
 
 type inventoryModel struct {
-	gw       service.Gateway
-	all      []service.VM
-	view     []service.VM // after filters+sort
+	gw       Gateway
+	all      []VM
+	view     []VM // after filters+sort
 	cursor   int
 	marked   map[string]bool
 	tbl      table.Model
@@ -39,7 +38,7 @@ type inventoryModel struct {
 	sortAsc   bool
 }
 
-func newInventoryModel(gw service.Gateway) inventoryModel {
+func newInventoryModel(gw Gateway) inventoryModel {
 	t := table.New(table.WithColumns([]table.Column{
 		{Title: "", Width: 2},
 		{Title: "", Width: 2},
@@ -52,7 +51,7 @@ func newInventoryModel(gw service.Gateway) inventoryModel {
 	return inventoryModel{gw: gw, marked: map[string]bool{}, tbl: t, sortAsc: true}
 }
 
-func (m *inventoryModel) mergeProvider(provider string, vms []service.VM) {
+func (m *inventoryModel) mergeProvider(provider string, vms []VM) {
 	// Drop existing VMs for that provider, append fresh ones.
 	kept := m.all[:0]
 	for _, v := range m.all {
@@ -95,24 +94,24 @@ func (m *inventoryModel) applySort() {
 	sort.SliceStable(m.view, less)
 }
 
-func stateMatches(filter string, s service.VMState) bool {
+func stateMatches(filter string, s VMState) bool {
 	switch filter {
 	case "", "all": return true
-	case "running": return s == service.StateRunning
-	case "stopped": return s == service.StateStopped
-	case "transition": return s == service.StateStarting || s == service.StateStopping
-	case "unknown": return s == service.StateUnknown
+	case "running": return s == StateRunning
+	case "stopped": return s == StateStopped
+	case "transition": return s == StateStarting || s == StateStopping
+	case "unknown": return s == StateUnknown
 	}
 	return true
 }
 
 // stateGlyph renders the exact glyphs from the mockup with theme colors.
-func stateGlyph(s Styles, st service.VMState) string {
+func stateGlyph(s Styles, st VMState) string {
 	switch st {
-	case service.StateRunning: return s.OK.Render("● running")
-	case service.StateStopped: return s.Err.Render("○ stopped")
-	case service.StateStarting: return s.Warn.Render("◐ starting")
-	case service.StateStopping: return s.Warn.Render("◑ stopping")
+	case StateRunning: return s.OK.Render("● running")
+	case StateStopped: return s.Err.Render("○ stopped")
+	case StateStarting: return s.Warn.Render("◐ starting")
+	case StateStopping: return s.Warn.Render("◑ stopping")
 	default: return s.Dim.Render("◌ unknown")
 	}
 }
@@ -151,8 +150,8 @@ func (m inventoryModel) Update(msg tea.KeyPressMsg, s Styles) (inventoryModel, t
 
 // connectTargets returns marked VMs (or the cursor VM), splitting out the ones
 // with no permission so App can flash "N opened · M skipped (no permission)".
-func (m inventoryModel) connectTargets() []service.VM {
-	var out []service.VM
+func (m inventoryModel) connectTargets() []VM {
+	var out []VM
 	if anyMarked(m.marked) {
 		for _, v := range m.view { if m.marked[v.ID] { out = append(out, v) } }
 	} else if len(m.view) > 0 {
@@ -268,7 +267,7 @@ func (m inventoryModel) View(s Styles, w, h int) string {
 	return lipgloss.NewStyle().Width(w).Height(h).Render(body)
 }
 
-func (m inventoryModel) renderRow(s Styles, v service.VM, selected bool) string {
+func (m inventoryModel) renderRow(s Styles, v VM, selected bool) string {
 	mark := "  "
 	if m.marked[v.ID] {
 		mark = s.Warn.Render("* ")
@@ -293,7 +292,7 @@ func (m inventoryModel) renderRow(s Styles, v service.VM, selected bool) string 
 	return line
 }
 
-func (m inventoryModel) detailView(s Styles, v service.VM) string {
+func (m inventoryModel) detailView(s Styles, v VM) string {
 	lines := []string{
 		s.SectionHead.Render("INSTANCE DETAIL"),
 		s.Text.Render("name:    ") + s.Accent.Render(v.Name),

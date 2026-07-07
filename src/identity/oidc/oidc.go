@@ -8,10 +8,10 @@ import (
 	"github.com/muhamm-ad/stratus/core/auth"
 )
 
-// Provider is the generic OIDC identity provider. It lazily builds an
+// Identity is the generic OIDC identity provider. It lazily builds an
 // auth.Client (discovery via go-oidc when an issuer is set) and delegates the
 // login/refresh lifecycle to auth.Session.
-type Provider struct {
+type Identity struct {
 	name string
 	cfg  Config
 
@@ -19,11 +19,11 @@ type Provider struct {
 	sess *auth.Session
 }
 
-func New(name string, cfg Config) *Provider { return &Provider{name: name, cfg: cfg} }
+func New(name string, cfg Config) *Identity { return &Identity{name: name, cfg: cfg} }
 
-var _ core.IdentityProvider = (*Provider)(nil)
+var _ core.IdentityProvider = (*Identity)(nil)
 
-func (p *Provider) ensure(ctx context.Context) (*auth.Session, error) {
+func (p *Identity) ensure(ctx context.Context) (*auth.Session, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.sess != nil {
@@ -46,7 +46,7 @@ func (p *Provider) ensure(ctx context.Context) (*auth.Session, error) {
 	return p.sess, nil
 }
 
-func (p *Provider) Login(ctx context.Context, onCode func(core.DeviceCode)) error {
+func (p *Identity) Login(ctx context.Context, onCode func(core.DeviceCode)) error {
 	s, err := p.ensure(ctx)
 	if err != nil {
 		return err
@@ -54,7 +54,7 @@ func (p *Provider) Login(ctx context.Context, onCode func(core.DeviceCode)) erro
 	return s.Login(ctx, onCode)
 }
 
-func (p *Provider) IsAuthenticated() bool {
+func (p *Identity) IsAuthenticated() bool {
 	p.mu.Lock()
 	s := p.sess
 	p.mu.Unlock()
@@ -66,7 +66,7 @@ func (p *Provider) IsAuthenticated() bool {
 	return s.IsAuthenticated()
 }
 
-func (p *Provider) IDToken(ctx context.Context) (string, error) {
+func (p *Identity) IDToken(ctx context.Context) (string, error) {
 	s, err := p.ensure(ctx)
 	if err != nil {
 		return "", err
@@ -74,7 +74,7 @@ func (p *Provider) IDToken(ctx context.Context) (string, error) {
 	return s.IDToken(ctx)
 }
 
-func (p *Provider) AccessToken(ctx context.Context, scopes ...string) (string, error) {
+func (p *Identity) AccessToken(ctx context.Context, scopes ...string) (string, error) {
 	s, err := p.ensure(ctx)
 	if err != nil {
 		return "", err
@@ -82,7 +82,7 @@ func (p *Provider) AccessToken(ctx context.Context, scopes ...string) (string, e
 	return s.AccessToken(ctx, scopes...)
 }
 
-func (p *Provider) Logout(ctx context.Context) error {
+func (p *Identity) Logout(ctx context.Context) error {
 	s, err := p.ensure(ctx)
 	if err != nil {
 		return (auth.Store{Service: "stratus", Key: "oidc:" + p.name}).Clear()
@@ -93,4 +93,4 @@ func (p *Provider) Logout(ctx context.Context) error {
 // Issuer reports the configured OIDC issuer (empty when the provider is
 // configured with explicit endpoints instead of an issuer). Used by the service
 // to evaluate connector identity constraints (e.g. Azure requires Entra).
-func (p *Provider) Issuer() string { return p.cfg.Issuer }
+func (p *Identity) Issuer() string { return p.cfg.Issuer }

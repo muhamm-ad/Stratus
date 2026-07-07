@@ -11,7 +11,7 @@ import (
 
 // BuildTUIGateway wires the real service (providers via service.Init). Exits
 // with an error when config.json is missing or invalid — no mock fallback.
-func BuildTUIGateway() (service.Gateway, error) {
+func BuildTUIGateway() (tui.Gateway, error) {
 	svc, warnings, err := service.Init()
 	if err != nil {
 		return nil, err
@@ -19,7 +19,7 @@ func BuildTUIGateway() (service.Gateway, error) {
 	for _, w := range warnings {
 		fmt.Fprintf(os.Stderr, "stratus: warning: %v\n", w)
 	}
-	return service.NewGateway(svc), nil
+	return tui.NewGateway(svc), nil
 }
 
 func main() {

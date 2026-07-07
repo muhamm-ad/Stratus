@@ -5,18 +5,17 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/muhamm-ad/stratus/service"
 )
 
 // settingsModel renders providers, auto-refresh, theme, and LOCAL CLI DETECTION.
 type settingsModel struct {
-	gw          service.Gateway
+	gw          Gateway
 	cursor      int
 	autoRefresh bool
-	clis        []service.CLIStatus
+	clis        []CLIStatus
 }
 
-func newSettingsModel(gw service.Gateway) settingsModel {
+func newSettingsModel(gw Gateway) settingsModel {
 	return settingsModel{gw: gw, autoRefresh: true, clis: gw.DetectCLIs()}
 }
 

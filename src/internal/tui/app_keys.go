@@ -6,7 +6,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/muhamm-ad/stratus/service"
 )
 
 func (a *App) updateAppKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -136,7 +135,7 @@ func (a *App) handleIntent(intent appIntent, cmd tea.Cmd) (tea.Model, tea.Cmd) {
 	return a, tea.Batch(cmds...)
 }
 
-func (a *App) connectCmd(targets []service.VM) []tea.Cmd {
+func (a *App) connectCmd(targets []VM) []tea.Cmd {
 	gw := a.gw
 	var cmds []tea.Cmd
 	var opened, skipped int
@@ -166,7 +165,7 @@ func (a *App) connectCmd(targets []service.VM) []tea.Cmd {
 	return cmds
 }
 
-func (a *App) stopCmd(targets []service.VM) []tea.Cmd {
+func (a *App) stopCmd(targets []VM) []tea.Cmd {
 	for _, vm := range targets {
 		_ = a.gw.StopVM(context.Background(), vm.ID)
 	}
