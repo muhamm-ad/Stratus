@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -73,4 +74,12 @@ func (p *Provider) Connect(ctx context.Context, req core.ConnectRequest) (core.S
 func (p *Provider) Logout(ctx context.Context) error {
 	p.creds, p.ok = awssdk.Credentials{}, false
 	return nil
+}
+
+func (p *Provider) GetAccount() (string, error) {
+	parts := strings.Split(p.cfg.RoleArn, ":")
+	if len(parts) >= 5 {
+		return parts[4], nil
+	}
+	return "", fmt.Errorf("aws: error getting account from role ARN")
 }

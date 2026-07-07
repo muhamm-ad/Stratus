@@ -1,6 +1,10 @@
 package tui
 
-import "charm.land/lipgloss/v2"
+import (
+	"image/color"
+
+	"charm.land/lipgloss/v2"
+)
 
 // Styles holds every reusable lipgloss.Style, derived from a Theme. We rebuild
 // this whenever the theme changes so the whole UI recolors in one place.
@@ -33,7 +37,7 @@ func NewStyles(th Theme) Styles {
 		Header:      lipgloss.NewStyle().Background(th.Surface).Foreground(th.Text),
 		TabActive:   lipgloss.NewStyle().Background(th.Accent).Foreground(th.Bg).Bold(true).Padding(0, 1),
 		TabInactive: lipgloss.NewStyle().Foreground(th.Dim).Padding(0, 1),
-		Title:       lipgloss.NewStyle().Foreground(th.Accent).Bold(true).Letterspacing(2),
+		Title:       lipgloss.NewStyle().Foreground(th.Accent).Bold(true),
 		SectionHead: lipgloss.NewStyle().Foreground(th.Dim).Bold(true), // callers upper-case the text
 		StatusBar:   lipgloss.NewStyle().Background(th.Surface).Foreground(th.Dim),
 		FilterLine:  lipgloss.NewStyle().Foreground(th.Dim),
@@ -54,7 +58,11 @@ func NewStyles(th Theme) Styles {
 	}
 }
 
-// blend is a tiny helper to produce a "tinted" background. In production you
-// would use lipgloss.Blend1D; here we keep a simple approximation for marked
-// rows / error banners. TODO: replace with lipgloss.Blend1D for exact tint.
-func blend(fg, bg lipgloss.Color) lipgloss.Color { return bg }
+// blend tints a background with a foreground color for marked rows / banners.
+func blend(fg, bg color.Color) color.Color {
+	colors := lipgloss.Blend1D(2, fg, bg)
+	if len(colors) > 1 {
+		return colors[1]
+	}
+	return bg
+}

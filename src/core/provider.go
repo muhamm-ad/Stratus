@@ -37,4 +37,7 @@ type ProviderConnector interface {
 
 	// Logout clears tokens and any cached credentials.
 	Logout(ctx context.Context) error
+
+	// GetAccount returns the account/subscription/project ID from the connector's configuration.
+	GetAccount() (string, error)
 }

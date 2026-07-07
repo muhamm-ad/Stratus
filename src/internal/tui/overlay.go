@@ -2,7 +2,6 @@ package tui
 
 import (
 	"charm.land/lipgloss/v2"
-	"charm.land/lipgloss/v2"
 )
 
 // composeOverlay centers the current overlay box over the background using the
@@ -27,11 +26,11 @@ func (a *App) composeOverlay(background string) string {
 	if x < 0 { x = 0 }
 	if y < 0 { y = 0 }
 
-	canvas := lipgloss.NewCanvas(
-		lipgloss.NewLayer(background),          // z 0
-		lipgloss.NewLayer(fg).X(x).Y(y).Z(1),   // z 1: floats on top, centered
+	comp := lipgloss.NewCompositor(
+		lipgloss.NewLayer(background),        // z 0
+		lipgloss.NewLayer(fg).X(x).Y(y).Z(1), // z 1: floats on top, centered
 	)
-	return canvas.Render()
+	return lipgloss.NewCanvas(a.width, a.height).Compose(comp).Render()
 }
 
 func (a *App) confirmQuitView() string {

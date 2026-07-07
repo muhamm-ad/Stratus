@@ -13,7 +13,7 @@ import (
 type Gateway interface {
 	// Identity (these already exist on the service; listed for completeness).
 	IdentityProviders() []IdP
-	LoginWith(ctx context.Context, name string, onDeviceCode func(DeviceCode)) (Identity, error)
+	LoginWith(ctx context.Context, name string, onDeviceCode func(core.DeviceCode)) (Identity, error)
 	ActiveIdentity() (Identity, bool)
 	ProviderUsable(provider string) (bool, core.IdentityConstraint)
 
@@ -32,12 +32,6 @@ type IdP struct {
 	Description string
 	Usable      bool
 	Constraint  string // e.g. "needs Entra identity"
-}
-
-type DeviceCode struct {
-	UserCode        string // e.g. "QKZP-DHTW"
-	VerificationURI string
-	Interval        time.Duration
 }
 
 type Identity struct {

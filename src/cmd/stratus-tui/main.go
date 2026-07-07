@@ -5,32 +5,25 @@ import (
 	"os"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/muhamm-ad/stratus/service"
 	"github.com/muhamm-ad/stratus/internal/tui"
+	"github.com/muhamm-ad/stratus/service"
 )
 
-
-// BuildTUIGateway assembles the Gateway consumed by the TUI. In production this
-// wires the real service (backed by providers/all self-registered plugins). For
-// the standalone demo build it returns the in-memory mock so
-// `go run ./cmd/stratus-tui` works with zero config.
+// BuildTUIGateway wires the real service (providers via service.Init). Exits
+// with an error when config.json is missing or invalid — no mock fallback.
 func BuildTUIGateway() (service.Gateway, error) {
-	if os.Getenv("STRATUS_REAL") == "" {
-		return service.mock.NewService(), nil // demo default
+	svc, warnings, err := service.Init()
+	if err != nil {
+		return nil, err
 	}
-	// TODO: return the real service, e.g.:
-	//   _ = all.Register()               // blank-import side effects already ran
-	//   svc, err := service.New(cfg)     // depends only on core
-	//   return svc, err
-	svc, err := service.NewService()
-	return svc, err
+	for _, w := range warnings {
+		fmt.Fprintf(os.Stderr, "stratus: warning: %v\n", w)
+	}
+	return service.NewGateway(svc), nil
 }
 
 func main() {
-	// bootstrap is the single assembly point shared by both entry points
-	// (Wails desktop + this TUI). It wires providers→service and returns a
-	// service.Gateway. For the standalone demo it returns the mock gateway.
-	gw, err := service.BuildTUIGateway()
+	gw, err := BuildTUIGateway()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "stratus:", err)
 		os.Exit(1)
@@ -38,7 +31,7 @@ func main() {
 
 	app := tui.New(gw)
 	p := tea.NewProgram(app)
-	app.SetSend(p.Send) // let async login callbacks inject device-code msgs
+	app.SetSend(p.Send)
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "stratus:", err)
 		os.Exit(1)

@@ -7,6 +7,7 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/lipgloss/v2"
 	"github.com/muhamm-ad/stratus/service"
+	"github.com/muhamm-ad/stratus/core"
 )
 
 type loginStep int
@@ -23,7 +24,7 @@ type loginModel struct {
 	step       loginStep
 	selected   string
 	spinner    spinner.Model
-	deviceCode service.DeviceCode
+	deviceCode core.DeviceCode
 	err        error
 }
 
@@ -56,7 +57,7 @@ func (m loginModel) Update(msg tea.KeyPressMsg, send func(tea.Msg)) (loginModel,
 }
 
 func (m loginModel) View(s Styles, w, h int) string {
-	title := s.Title.Render("STRATUS")
+	title := s.Title.Render("S T R A T U S")
 	sub := s.Dim.Render("multi-cloud vm gateway · terminal edition")
 	rule := s.Dim.Render(lipgloss.NewStyle().Width(40).Render("────────────────────────────────────────"))
 
@@ -76,12 +77,18 @@ func (m loginModel) View(s Styles, w, h int) string {
 			rows = append(rows, line)
 		}
 		hint := s.Dim.Render("j/k move · ⏎ select")
+		if m.err != nil {
+			hint = s.Err.Render(m.err.Error()) + "\n" + hint
+		}
 		inner = head + "\n\n" + lipgloss.JoinVertical(lipgloss.Left, rows...) + "\n\n" + hint
 	} else {
 		label := s.Accent.Render(m.selected)
 		code := s.CodeBox.Render(m.deviceCode.UserCode)
 		url := s.Cyan.Render(m.deviceCode.VerificationURI)
 		wait := s.Warn.Render(m.spinner.View() + " waiting for browser authentication…")
+		if m.err != nil {
+			wait = s.Err.Render(m.err.Error()) + "\n" + wait
+		}
 		inner = fmt.Sprintf("%s\n\nFirst, copy your one-time code:\n\n%s\n\nThen enter it at %s\n\n%s\n\n%s",
 			label, code, url, wait, s.Dim.Render("esc cancel"))
 	}

@@ -30,12 +30,12 @@ func (g *Gateway) IdentityProviders() []service.IdP {
 	}
 }
 
-func (g *Gateway) LoginWith(ctx context.Context, name string, onCode func(service.DeviceCode)) (service.Identity, error) {
+func (g *Gateway) LoginWith(ctx context.Context, name string, onCode func(core.DeviceCode)) (service.Identity, error) {
 	// Simulate an RFC 8628 device flow: surface a code, then "complete".
 	// TODO: replace with the real identity/oidc PKCE browser flow (RFC 8252)
 	// with device-code fallback; call onCode from the flow's callback/channel.
 	if onCode != nil {
-		onCode(service.DeviceCode{UserCode: "QKZP-DHTW", VerificationURI: "https://id.stratus.dev/activate", Interval: 5 * time.Second})
+		onCode(core.DeviceCode{UserCode: "QKZP-DHTW", VerificationURI: "https://id.stratus.dev/activate", Interval: 5 * time.Second})
 	}
 	select {
 	case <-time.After(2 * time.Second):
@@ -57,8 +57,7 @@ func (g *Gateway) ActiveIdentity() (service.Identity, bool) {
 }
 
 func (g *Gateway) ProviderUsable(p string) (bool, core.IdentityConstraint) {
-	// TODO: surface real core.IdentityConstraint (e.g. Azure needs Entra issuer).
-	return true, core.IdentityConstraint{}
+	return true, nil
 }
 
 func (g *Gateway) ListVMs(ctx context.Context, provider string) ([]service.VM, error) {

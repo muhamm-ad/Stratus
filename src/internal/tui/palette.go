@@ -63,3 +63,23 @@ func (m paletteModel) Update(msg tea.KeyPressMsg) (paletteModel, *command) {
 	}
 	return m, nil
 }
+
+func (m paletteModel) View(s Styles) string {
+	var rows []string
+	rows = append(rows, s.Accent.Bold(true).Render("command palette"))
+	rows = append(rows, "")
+	rows = append(rows, s.Dim.Render(m.input.View()))
+	rows = append(rows, "")
+	for i, c := range m.filtered {
+		cur := "  "
+		if i == m.cursor {
+			cur = s.Accent.Render("▸ ")
+		}
+		rows = append(rows, cur+s.Text.Render(c.name)+s.Dim.Render(" — "+c.desc))
+	}
+	if len(m.filtered) == 0 {
+		rows = append(rows, s.Dim.Render("no matches"))
+	}
+	rows = append(rows, "", s.Dim.Render("⏎ run · esc cancel"))
+	return s.OverlayBox.Width(52).Render(strings.Join(rows, "\n"))
+}

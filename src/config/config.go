@@ -15,7 +15,7 @@ import (
 	"fmt"
 )
 
-//go:embed config.json
+//go:embed myconfig.json
 var raw []byte
 
 // Sections holds the raw configuration grouped into identity providers and

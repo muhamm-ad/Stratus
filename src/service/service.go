@@ -24,8 +24,7 @@ import (
 // one identity provider is "active" at a time — the one the user signed in with.
 type Service struct {
 	idps       map[string]core.IdentityProvider
-	active     core.IdentityProvider
-	activeName string
+	activeName string // key into idps; "" means none chosen
 	registry   *core.Registry
 }
 
@@ -35,8 +34,9 @@ type Service struct {
 func NewService(idps map[string]core.IdentityProvider, registry *core.Registry) *Service {
 	s := &Service{idps: idps, registry: registry}
 	if len(idps) == 1 {
-		for name, idp := range idps {
-			s.active, s.activeName = idp, name
+		for name := range idps {
+			s.activeName = name
+			break
 		}
 	}
 	return s
@@ -66,7 +66,7 @@ func (s *Service) LoginWith(ctx context.Context, name string, onCode func(core.D
 	if err := idp.Login(ctx, onCode); err != nil {
 		return err
 	}
-	s.active, s.activeName = idp, name
+	s.activeName = name
 	return nil
 }
 
@@ -84,27 +84,55 @@ func (s *Service) Login(ctx context.Context, onCode func(core.DeviceCode)) error
 }
 
 func (s *Service) IsAuthenticated() bool {
-	return s.active != nil && s.active.IsAuthenticated()
+	idp, ok := s.activeIDP()
+	return ok && idp.IsAuthenticated()
 }
 
 func (s *Service) Logout(ctx context.Context) error {
-	if s.active == nil {
+	idp, ok := s.activeIDP()
+	if !ok {
 		return nil
 	}
-	err := s.active.Logout(ctx)
-	s.active, s.activeName = nil, ""
+	err := idp.Logout(ctx)
+	s.activeName = ""
 	return err
 }
 
+func (s *Service) activeIDP() (core.IdentityProvider, bool) {
+	if s.activeName == "" {
+		return nil, false
+	}
+	idp, ok := s.idps[s.activeName]
+	return idp, ok
+}
+
 func (s *Service) requireActive() (core.IdentityProvider, error) {
-	if s.active == nil {
+	idp, ok := s.activeIDP()
+	if !ok {
 		return nil, core.ErrNotAuthenticated
 	}
-	return s.active, nil
+	return idp, nil
 }
 
 // Providers lists the registered cloud-provider IDs.
 func (s *Service) Providers() []core.ProviderID { return s.registry.IDs() }
+
+// Accounts returns configured account/subscription/project IDs per provider.
+func (s *Service) Accounts() map[string]string {
+	out := make(map[string]string)
+	for _, id := range s.registry.IDs() {
+		c, ok := s.registry.Get(id)
+		if !ok {
+			continue
+		}
+		account, err := c.GetAccount()
+		if err != nil {
+			continue
+		}
+		out[string(id)] = account
+	}
+	return out
+}
 
 // ProviderUsable reports whether a provider can be used with the currently
 // active identity. Azure, for instance, is unusable unless the active identity
@@ -118,10 +146,11 @@ func (s *Service) ProviderUsable(id core.ProviderID) bool {
 	if !ok {
 		return true
 	}
-	if s.active == nil {
+	idp, ok := s.activeIDP()
+	if !ok {
 		return true
 	}
-	return con.AcceptsIssuer(core.IssuerOf(s.active))
+	return con.AcceptsIssuer(core.IssuerOf(idp))
 }
 
 // Connect derives a provider's credentials from the ACTIVE identity (silent).

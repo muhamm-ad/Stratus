@@ -1,11 +1,12 @@
 package tui
 
 import (
-	// "strings"
+	"errors"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/muhamm-ad/stratus/core"
 	"github.com/muhamm-ad/stratus/service"
 )
 
@@ -65,6 +66,9 @@ type App struct {
 	identity  service.Identity
 	banners   []string // error banners (e.g. gcp session expired)
 
+	searchMode bool
+	searchBuf  string
+
 	lastG time.Time // for multi-key "gg"
 }
 
@@ -118,7 +122,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.updateAppKeys(msg)
 
 	case deviceCodeMsg:
-		a.login.deviceCode = service.DeviceCode(msg)
+		a.login.deviceCode = core.DeviceCode(msg)
 		return a, nil
 
 	case loginResultMsg:
@@ -144,6 +148,19 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.logs.add("INFO", msg.provider+" synced ("+itoa(len(msg.vms))+" VMs)")
 		return a, nil
 
+	case vmsLoadErrMsg:
+		if errors.Is(msg.err, core.ErrNotAuthenticated) || errors.Is(msg.err, core.ErrExchange) {
+			a.banners = append(a.banners, "▲ "+msg.provider+": session expired, VMs not loaded — press R to reconnect")
+			a.logs.add("WARN", msg.provider+" token expired")
+		} else {
+			a.logs.add("WARN", msg.provider+": "+msg.err.Error())
+		}
+		return a, nil
+
+	case connectErrMsg:
+		a.flash, a.flashKind = "connect failed: "+msg.vm, "err"
+		return a, flashClearCmd()
+
 	case sessionOpenedMsg:
 		return a, execSessionCmd(msg.spec)
 
@@ -159,7 +176,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case autoRefreshMsg:
 		if a.settings.autoRefresh {
-			cmds = append(cmds, syncProviderCmd(a.gw, "", 0), autoRefreshCmd())
+			cmds = append(cmds,
+				syncProviderCmd(a.gw, "aws", 0),
+				syncProviderCmd(a.gw, "gcp", 0),
+				syncProviderCmd(a.gw, "azure", 0),
+				autoRefreshCmd(),
+			)
 		} else {
 			cmds = append(cmds, autoRefreshCmd())
 		}
@@ -208,7 +230,7 @@ func (a *App) appView() string {
 	case tabAudit:
 		mid = a.audit.View(a.styles, a.width, a.contentHeight())
 	case tabSettings:
-		mid = a.settings.View(a.styles, a.width, a.contentHeight())
+		mid = a.settings.View(a.styles, a.width, a.contentHeight(), a.themeIdx)
 	}
 	parts := []string{header}
 	if a.tab != tabSettings {
