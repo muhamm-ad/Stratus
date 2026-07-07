@@ -2,11 +2,6 @@ import { Loader2, KeyRound } from "lucide-react";
 import { useAppStore } from "@/store/useAppStore";
 import { StratusMark } from "@/ui/StratusLogo";
 
-const LOGIN_METHODS = [
-  { key: "okta",  label: "Okta SSO"  },
-  { key: "saml",  label: "SAML 2.0"  },
-];
-
 export function AuthScreen() {
   const loginStage = useAppStore(s => s.loginStage);
   const login = useAppStore(s => s.login);
@@ -21,9 +16,7 @@ export function AuthScreen() {
 
         {/* Header */}
         <div className="flex flex-col items-center text-center mb-[30px]">
-          <div
-            className="w-12 h-12 rounded-[13px] flex items-center justify-center"
-          >
+          <div className="w-12 h-12 rounded-[13px] flex items-center justify-center">
             <StratusMark size={80} />
           </div>
           <div className="text-[22px] font-bold tracking-tight text-foreground">Stratus</div>
@@ -38,32 +31,24 @@ export function AuthScreen() {
             <span className="flex-1 h-px" style={{ background: "var(--border)" }} />
           </div>
 
-          <div className="flex gap-2.5">
-            {LOGIN_METHODS.map(m => {
-              const loading = loginStage === m.key;
-              return (
-                <button
-                  key={m.key}
-                  onClick={() => login(m.key)}
-                  disabled={busy}
-                  className="flex-1 inline-flex items-center justify-center gap-2 h-[46px] rounded-[8px] border font-semibold text-[13px] cursor-pointer transition-all duration-150 disabled:opacity-55 disabled:cursor-default"
-                  style={{
-                    borderColor: "var(--border)",
-                    background: loading ? "var(--primary)" : "var(--raised)",
-                    color: loading ? "#fff" : "var(--foreground)",
-                  }}
-                >
-                  {loading
-                    ? <><Loader2 size={16} className="animate-spin" /> Redirecting…</>
-                    : <><KeyRound size={17} /> {m.label}</>
-                  }
-                </button>
-              );
-            })}
-          </div>
+          <button
+            onClick={() => login("entra")}
+            disabled={busy}
+            className="w-full inline-flex items-center justify-center gap-2 h-[46px] rounded-[8px] border font-semibold text-[13px] cursor-pointer transition-all duration-150 disabled:opacity-55 disabled:cursor-default"
+            style={{
+              borderColor: "var(--border)",
+              background: busy ? "var(--primary)" : "var(--raised)",
+              color: busy ? "#fff" : "var(--foreground)",
+            }}
+          >
+            {busy
+              ? <><Loader2 size={16} className="animate-spin" /> Opening browser…</>
+              : <><KeyRound size={17} /> Sign in with Microsoft Entra ID</>
+            }
+          </button>
 
           <div className="text-center mt-[18px] text-[12.5px] text-muted-foreground">
-            Need access to a different tenant?{" "}
+            Need access?{" "}
             <a
               href="#"
               onClick={e => e.preventDefault()}
@@ -76,8 +61,8 @@ export function AuthScreen() {
         </div>
 
         <div className="text-center mt-[18px] text-[12px] text-muted-foreground leading-relaxed">
-          Sign in once with your identity provider.<br />
-          Connect AWS, Azure &amp; GCP from inside the app.
+          Sign in once with Microsoft Entra ID.<br />
+          Stratus connects AWS, Azure &amp; GCP silently — no re-authentication.
         </div>
       </div>
     </div>

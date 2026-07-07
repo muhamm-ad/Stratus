@@ -1,11 +1,11 @@
 import { create } from "zustand";
 import type {
   Screen, ViewMode, VMInstance, Session, ToastItem, ModalItem, ProviderID, SSOStatus,
-	VMState,
+  VMState,
 } from "@/types/domain";
 
-
-import { MOCK_VMS, PROVIDER_META } from "@/lib/bridge";
+import { PROVIDER_META } from "@/lib/bridge";
+import * as bridge from "@/lib/bridge";
 
 export type FilterProvider = "all" | ProviderID;
 export type FilterState = "all" | VMState;
@@ -30,8 +30,8 @@ interface AppState {
   providerError: Record<ProviderID, boolean>;
 
   vms: VMInstance[];
-  selectedVmId: number | null;
-  selectedVmIds: number[];
+  selectedVmId: string | null;
+  selectedVmIds: string[];
   sessions: Session[];
   toasts: ToastItem[];
   modal: ModalItem | null;
@@ -43,20 +43,21 @@ interface AppState {
 }
 
 interface AppActions {
+  init: () => Promise<void>;
   setTheme: (t: "dark" | "light" | "system") => void;
   toggleTheme: () => void;
   go: (screen: Screen) => void;
   login: (method: string) => Promise<void>;
   signOut: () => void;
-  refresh: () => void;
-  reconnect: (p: ProviderID) => void;
-  ssoConnect: (p: ProviderID) => void;
+  refresh: () => Promise<void>;
+  reconnect: (p: ProviderID) => Promise<void>;
+  ssoConnect: (p: ProviderID) => Promise<void>;
   ssoDisconnect: (p: ProviderID) => void;
   toggleProvider: (p: ProviderID) => void;
-  openVm: (id: number) => void;
+  openVm: (id: string) => void;
   closeDrawer: () => void;
   connect: (vm: VMInstance) => void;
-  connectById: (id: number) => void;
+  connectById: (id: string) => void;
   closeSession: (sid: string) => void;
   toast: (kind: ToastItem["kind"], title: string, body?: string, action?: ToastItem["action"]) => void;
   dismissToast: (id: string) => void;
@@ -72,8 +73,8 @@ interface AppActions {
   toggleAutoRefresh: () => void;
   incrementTick: () => void;
   setDensity: (d: Density) => void;
-  toggleSelectVm: (id: number) => void;
-  selectAllVms: (ids: number[]) => void;
+  toggleSelectVm: (id: string) => void;
+  selectAllVms: (ids: string[]) => void;
   clearSelection: () => void;
   bulkConnect: () => void;
   setSessionSearch: (q: string) => void;
@@ -82,15 +83,7 @@ interface AppActions {
 
 type Store = AppState & AppActions;
 
-let _timers: ReturnType<typeof setTimeout>[] = [];
-function later(fn: () => void, ms: number) {
-  const t = setTimeout(fn, ms);
-  _timers.push(t);
-  return t;
-}
-
-
-
+const PROVIDERS: ProviderID[] = ["aws", "azure", "gcp"];
 
 export const useAppStore = create<Store>((set, get) => ({
   theme: "dark",
@@ -106,17 +99,14 @@ export const useAppStore = create<Store>((set, get) => ({
   filterRegion: "all",
   filterTag: "",
 
-  sso: { aws: "connected", azure: "connected", gcp: "connected" },
+  sso: { aws: "disconnected", azure: "disconnected", gcp: "disconnected" },
   providerLoading: { aws: false, azure: false, gcp: false },
-  providerError: { aws: false, azure: true, gcp: false },
+  providerError: { aws: false, azure: false, gcp: false },
 
-  vms: MOCK_VMS,
+  vms: [],
   selectedVmId: null,
   selectedVmIds: [],
-  sessions: [
-    { sid: "s1", vmId: 1, openedAt: Date.now() - 8 * 60000 },
-    { sid: "s2", vmId: 12, openedAt: Date.now() - 23 * 60000 },
-  ],
+  sessions: [],
   toasts: [],
   modal: null,
   autoRefresh: false,
@@ -124,6 +114,22 @@ export const useAppStore = create<Store>((set, get) => ({
   density: "comfortable",
   sessionSearch: "",
   auditSearch: "",
+
+  // ── Startup ──────────────────────────────────────────────────────────────
+
+  init: async () => {
+    try {
+      const authed = await bridge.isAuthenticated();
+      if (authed) {
+        set({ loggedIn: true, screen: "inventory" });
+        await get().refresh();
+      }
+    } catch {
+      // Backend unreachable (standalone browser dev) — stay on auth screen.
+    }
+  },
+
+  // ── Theme ─────────────────────────────────────────────────────────────────
 
   setTheme: (t) => {
     const resolved = t === "system" ? "dark" : t;
@@ -139,11 +145,19 @@ export const useAppStore = create<Store>((set, get) => ({
 
   go: (screen) => set({ screen, selectedVmId: null, selectedVmIds: [] }),
 
-  login: async (method) => {
-    set({ loginStage: method });
-    await new Promise<void>(r => later(r, 1400));
-    set({ loggedIn: true, loginStage: null, screen: "inventory" });
-    get().refresh();
+  // ── Auth ──────────────────────────────────────────────────────────────────
+
+  login: async (_method) => {
+    set({ loginStage: "browser" });
+    try {
+      await bridge.login();
+      set({ loggedIn: true, loginStage: null, screen: "inventory" });
+      // Auto-connect and list all providers after Entra login.
+      await get().refresh();
+    } catch (e) {
+      set({ loginStage: null });
+      get().toast("error", "Login failed", String(e));
+    }
   },
 
   signOut: () => {
@@ -154,57 +168,103 @@ export const useAppStore = create<Store>((set, get) => ({
         cancelLabel: "Stay",
         confirmLabel: "Sign out",
         danger: true,
-        onConfirm: () => set({ loggedIn: false, modal: null }),
+        onConfirm: async () => {
+          await bridge.logout();
+          set({
+            loggedIn: false,
+            modal: null,
+            vms: [],
+            sso: { aws: "disconnected", azure: "disconnected", gcp: "disconnected" },
+            providerError: { aws: false, azure: false, gcp: false },
+            sessions: [],
+          });
+        },
       },
     });
   },
 
-  refresh: () => {
-    const { providerError } = get();
-    set({
-      providerLoading: {
-        aws: true,
-        azure: providerError.azure ? false : true,
-        gcp: true,
-      },
-    });
-    later(() => set(s => ({ providerLoading: { ...s.providerLoading, aws: false } })), 650);
-    later(() => set(s => ({ providerLoading: { ...s.providerLoading, gcp: false } })), 1050);
-    later(() => set(s => ({ providerLoading: { ...s.providerLoading, azure: false } })), 1400);
+  // ── Provider connection & inventory fetch ─────────────────────────────────
+
+  refresh: async () => {
+    // Connect + list every provider whose SSO toggle is on, in parallel.
+    await Promise.all(
+      PROVIDERS.map(async (p) => {
+        if (get().sso[p] === "disconnected") return;
+        set(s => ({ providerLoading: { ...s.providerLoading, [p]: true }, providerError: { ...s.providerError, [p]: false } }));
+        try {
+          // If not yet connected, do the silent exchange first.
+          if (get().sso[p] !== "connected") {
+            await bridge.connectProvider(p);
+            set(s => ({ sso: { ...s.sso, [p]: "connected" } }));
+          }
+          const vms = await bridge.listInstances(p, "");
+          set(s => ({
+            vms: [...s.vms.filter(v => v.provider !== p), ...vms],
+            providerLoading: { ...s.providerLoading, [p]: false },
+          }));
+        } catch (e) {
+          set(s => ({
+            providerLoading: { ...s.providerLoading, [p]: false },
+            providerError: { ...s.providerError, [p]: true },
+          }));
+          get().toast("error", `${PROVIDER_META[p].label} failed to load`, String(e));
+        }
+      })
+    );
   },
 
-  reconnect: (p) => {
+  reconnect: async (p) => {
     set(s => ({ providerError: { ...s.providerError, [p]: false }, providerLoading: { ...s.providerLoading, [p]: true } }));
-    later(() => {
-      set(s => ({ providerLoading: { ...s.providerLoading, [p]: false } }));
+    try {
+      await bridge.connectProvider(p);
+      set(s => ({ sso: { ...s.sso, [p]: "connected" } }));
+      const vms = await bridge.listInstances(p, "");
+      set(s => ({
+        vms: [...s.vms.filter(v => v.provider !== p), ...vms],
+        providerLoading: { ...s.providerLoading, [p]: false },
+      }));
       get().toast("success", `${PROVIDER_META[p].label} reconnected`, PROVIDER_META[p].identity);
-    }, 1100);
+    } catch (e) {
+      set(s => ({
+        providerLoading: { ...s.providerLoading, [p]: false },
+        providerError: { ...s.providerError, [p]: true },
+      }));
+      get().toast("error", `${PROVIDER_META[p].label} reconnect failed`, String(e));
+    }
   },
 
-  ssoConnect: (p) => {
+  ssoConnect: async (p) => {
     set(s => ({ sso: { ...s.sso, [p]: "connecting" } }));
-    later(() => {
+    try {
+      await bridge.connectProvider(p);
+      set(s => ({ sso: { ...s.sso, [p]: "connected" }, providerLoading: { ...s.providerLoading, [p]: true } }));
+      const vms = await bridge.listInstances(p, "");
       set(s => ({
-        sso: { ...s.sso, [p]: "connected" },
-        providerError: { ...s.providerError, [p]: false },
-        providerLoading: { ...s.providerLoading, [p]: true },
+        vms: [...s.vms.filter(v => v.provider !== p), ...vms],
+        providerLoading: { ...s.providerLoading, [p]: false },
       }));
-      later(() => {
-        set(s => ({ providerLoading: { ...s.providerLoading, [p]: false } }));
-        get().toast("success", `${PROVIDER_META[p].label} connected`, PROVIDER_META[p].identity);
-      }, 800);
-    }, 1400);
+      get().toast("success", `${PROVIDER_META[p].label} connected`, PROVIDER_META[p].identity);
+    } catch (e) {
+      set(s => ({ sso: { ...s.sso, [p]: "disconnected" }, providerLoading: { ...s.providerLoading, [p]: false }, providerError: { ...s.providerError, [p]: true } }));
+      get().toast("error", `${PROVIDER_META[p].label} connect failed`, String(e));
+    }
   },
 
   ssoDisconnect: (p) => {
-    set(s => ({ sso: { ...s.sso, [p]: "disconnected" }, providerError: { ...s.providerError, [p]: false } }));
+    set(s => ({
+      sso: { ...s.sso, [p]: "disconnected" },
+      providerError: { ...s.providerError, [p]: false },
+      vms: s.vms.filter(v => v.provider !== p),
+    }));
   },
 
   toggleProvider: (p) => {
     const { sso } = get();
     if (sso[p] === "connected") get().ssoDisconnect(p);
-    else if (sso[p] !== "connecting") get().ssoConnect(p);
+    else if (sso[p] !== "connecting") void get().ssoConnect(p);
   },
+
+  // ── VM selection & sessions ───────────────────────────────────────────────
 
   openVm: (id) => set({ selectedVmId: id }),
   closeDrawer: () => set({ selectedVmId: null }),
@@ -213,7 +273,9 @@ export const useAppStore = create<Store>((set, get) => ({
     if (!vm.canConnect) return;
     set(s => {
       const exists = s.sessions.some(x => x.vmId === vm.id);
-      const sessions = exists ? s.sessions : [...s.sessions, { sid: `sx${Date.now()}`, vmId: vm.id, openedAt: Date.now() }];
+      const sessions = exists
+        ? s.sessions
+        : [...s.sessions, { sid: `sx${Date.now()}`, vmId: vm.id, openedAt: Date.now() }];
       return { sessions, selectedVmId: null };
     });
     get().toast("success", "Session opened", `${vm.name} · ${PROVIDER_META[vm.provider].method}`);
@@ -226,15 +288,19 @@ export const useAppStore = create<Store>((set, get) => ({
 
   closeSession: (sid) => set(s => ({ sessions: s.sessions.filter(x => x.sid !== sid) })),
 
+  // ── Toasts & modals ───────────────────────────────────────────────────────
+
   toast: (kind, title, body?, action?) => {
     const id = `to${Date.now()}${Math.random()}`;
     set(s => ({ toasts: [...s.toasts, { id, kind, title, body, action }] }));
-    later(() => get().dismissToast(id), 4200);
+    setTimeout(() => get().dismissToast(id), 4200);
   },
 
   dismissToast: (id) => set(s => ({ toasts: s.toasts.filter(t => t.id !== id) })),
   openModal: (m) => set({ modal: m }),
   closeModal: () => set({ modal: null }),
+
+  // ── Filters ───────────────────────────────────────────────────────────────
 
   setSearch: (q) => set({ search: q }),
   setFilterProvider: (p) => set({ filterProvider: p }),
@@ -246,6 +312,8 @@ export const useAppStore = create<Store>((set, get) => ({
   toggleAutoRefresh: () => set(s => ({ autoRefresh: !s.autoRefresh })),
   incrementTick: () => set(s => ({ tickCount: s.tickCount + 1 })),
   setDensity: (d) => set({ density: d }),
+
+  // ── Bulk selection ────────────────────────────────────────────────────────
 
   toggleSelectVm: (id) => set(s => ({
     selectedVmIds: s.selectedVmIds.includes(id)

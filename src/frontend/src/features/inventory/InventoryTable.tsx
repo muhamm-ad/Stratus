@@ -34,7 +34,7 @@ function useFilteredVms() {
     }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      const hay = `${vm.name} ${vm.iid} ${vm.region} ${vm.tags.join(" ")}`.toLowerCase();
+      const hay = `${vm.name} ${vm.id} ${vm.region} ${vm.tags.join(" ")}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -133,7 +133,7 @@ function TableRow({ vm }: { vm: VMInstance }) {
         />
         <div className="min-w-0">
           <div className="font-semibold whitespace-nowrap overflow-hidden text-ellipsis text-foreground">{vm.name}</div>
-          <div className="text-[11px] text-muted-foreground" style={{ fontFamily: "var(--font-mono)" }}>{vm.iid}</div>
+          <div className="text-[11px] text-muted-foreground" style={{ fontFamily: "var(--font-mono)" }}>{vm.id}</div>
         </div>
       </div>
 
@@ -188,7 +188,7 @@ function VMCard({ vm }: { vm: VMInstance }) {
         />
         <div className="flex-1 min-w-0">
           <div className="font-semibold text-[14px] whitespace-nowrap overflow-hidden text-ellipsis text-foreground">{vm.name}</div>
-          <div className="text-[11px] text-muted-foreground" style={{ fontFamily: "var(--font-mono)" }}>{vm.iid}</div>
+          <div className="text-[11px] text-muted-foreground" style={{ fontFamily: "var(--font-mono)" }}>{vm.id}</div>
         </div>
         <StatusBadge state={vm.state} />
       </div>
@@ -303,7 +303,7 @@ function GroupedRow({ vm }: { vm: VMInstance }) {
       <div className="flex items-center gap-2.5 min-w-0">
         <span className="inline-block rounded-full" style={{ width: 9, height: 9, background: stateMeta.color, flexShrink: 0 }} />
         <span className="font-semibold whitespace-nowrap overflow-hidden text-ellipsis text-foreground">{vm.name}</span>
-        <span className="text-[11px] text-muted-foreground" style={{ fontFamily: "var(--font-mono)" }}>{vm.iid}</span>
+        <span className="text-[11px] text-muted-foreground" style={{ fontFamily: "var(--font-mono)" }}>{vm.id}</span>
       </div>
       <div className="text-[12px] text-muted-foreground" style={{ fontFamily: "var(--font-mono)" }}>{vm.region}</div>
       <div className="text-[12px] text-muted-foreground" style={{ fontFamily: "var(--font-mono)" }}>{vm.size}</div>

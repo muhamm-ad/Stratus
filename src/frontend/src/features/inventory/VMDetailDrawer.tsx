@@ -60,9 +60,9 @@ export function VMDetailDrawer() {
             </div>
             <div className="flex items-center gap-2">
               <span className="text-[12px] text-muted-foreground" style={{ fontFamily: "var(--font-mono)" }}>
-                {vm.iid}
+                {vm.id}
               </span>
-              <CopyBtn value={vm.iid} title="Copy instance ID" />
+              <CopyBtn value={vm.id} title="Copy instance ID" />
             </div>
           </div>
           <button
