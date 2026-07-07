@@ -1,32 +1,39 @@
-// Command stratus is the full-screen terminal interface (TUI) for Stratus.
-// It assembles the shared service via bootstrap (the same wiring the desktop
-// app uses) and runs the Bubble Tea program.
-//
-//	go run ./cmd/stratus-tui
-//
-// Configure identity + providers in config/config.json, or via the STRATUS_*
-// environment variables.
 package main
 
 import (
 	"fmt"
 	"os"
 
-	tea "github.com/charmbracelet/bubbletea"
-
-	"github.com/muhamm-ad/stratus/bootstrap"
+	tea "charm.land/bubbletea/v2"
+	"github.com/muhamm-ad/stratus/internal/tui"
+	"github.com/muhamm-ad/stratus/service"
 )
 
-func main() {
-	svc, warnings, err := bootstrap.New()
+// BuildTUIGateway wires the real service (providers via service.Init). Exits
+// with an error when config.json is missing or invalid — no mock fallback.
+func BuildTUIGateway() (tui.Gateway, error) {
+	svc, warnings, err := service.Init()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "stratus: %v\n", err)
+		return nil, err
+	}
+	for _, w := range warnings {
+		fmt.Fprintf(os.Stderr, "stratus: warning: %v\n", w)
+	}
+	return tui.NewGateway(svc), nil
+}
+
+func main() {
+	gw, err := BuildTUIGateway()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "stratus:", err)
 		os.Exit(1)
 	}
 
-	p := tea.NewProgram(New(svc, warnings), tea.WithAltScreen(), tea.WithMouseAllMotion())
+	app := tui.New(gw)
+	p := tea.NewProgram(app)
+	app.SetSend(p.Send)
 	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "stratus: %v\n", err)
+		fmt.Fprintln(os.Stderr, "stratus:", err)
 		os.Exit(1)
 	}
 }
