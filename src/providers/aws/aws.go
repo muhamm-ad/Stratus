@@ -1,111 +1,85 @@
-// Package aws implements core.ProviderConnector for AWS: it exchanges
-// the Entra id_token for temporary AWS credentials via STS
-// AssumeRoleWithWebIdentity.
 package aws
 
 import (
 	"context"
 	"fmt"
-	"sync"
-	"time"
+	"strings"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
+	awssdk "github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
-	ststypes "github.com/aws/aws-sdk-go-v2/service/sts/types"
 
 	"github.com/muhamm-ad/stratus/core"
 )
 
-// assumer is the subset of the STS client used here (mockable in tests).
-type assumer interface {
-	AssumeRoleWithWebIdentity(context.Context, *sts.AssumeRoleWithWebIdentityInput, ...func(*sts.Options)) (*sts.AssumeRoleWithWebIdentityOutput, error)
+// idTokenRetriever adapts the active identity to the AWS SDK's
+// stscreds.IdentityTokenRetriever interface.
+type idTokenRetriever struct {
+	ctx context.Context
+	idp core.IdentityProvider
 }
 
-// Provider implements core.ProviderConnector for AWS.
-type Provider struct {
-	cfg    Config
-	newSTS func(region string) assumer
-	now    func() time.Time
-
-	mu    sync.Mutex
-	creds *ststypes.Credentials
-}
-
-type Option func(*Provider)
-
-// WithAssumerFactory injects a custom STS client factory (tests).
-func WithAssumerFactory(f func(region string) assumer) Option {
-	return func(p *Provider) { p.newSTS = f }
-}
-func WithClock(f func() time.Time) Option { return func(p *Provider) { p.now = f } }
-
-// New builds an AWS connector.
-func New(cfg Config, opts ...Option) *Provider {
-	p := &Provider{cfg: cfg, newSTS: defaultAssumer, now: time.Now}
-	for _, opt := range opts {
-		opt(p)
+func (r idTokenRetriever) GetIdentityToken() ([]byte, error) {
+	t, err := r.idp.IDToken(r.ctx)
+	if err != nil {
+		return nil, err
 	}
-	return p
+	return []byte(t), nil
 }
 
-// defaultAssumer builds an STS client. AssumeRoleWithWebIdentity is unsigned
-// (the web identity token is the credential), so anonymous credentials are used.
-func defaultAssumer(region string) assumer {
-	return sts.New(sts.Options{Region: region, Credentials: aws.AnonymousCredentials{}})
+// Provider federates the OIDC id_token to AWS via STS
+// AssumeRoleWithWebIdentity, using the SDK's built-in web-identity provider
+// (handles caching + refresh).
+type Provider struct {
+	cfg   Config
+	creds awssdk.Credentials
+	ok    bool
 }
+
+func New(cfg Config) *Provider { return &Provider{cfg: cfg} }
 
 func (p *Provider) ID() core.ProviderID { return core.ProviderAWS }
 
-func (p *Provider) IsAuthenticated() bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.creds == nil || p.creds.Expiration == nil {
-		return false
-	}
-	return p.now().Before(*p.creds.Expiration)
-}
-
-// Authenticate exchanges the Entra id_token for temporary AWS credentials.
 func (p *Provider) Authenticate(ctx context.Context, idp core.IdentityProvider) error {
-	idToken, err := idp.IDToken(ctx)
+	awsCfg, err := awsconfig.LoadDefaultConfig(ctx,
+		awsconfig.WithRegion(p.cfg.Region),
+		awsconfig.WithCredentialsProvider(awssdk.AnonymousCredentials{}), // web-identity call is unsigned
+	)
 	if err != nil {
-		return fmt.Errorf("aws: %w", err)
+		return fmt.Errorf("%w: aws config: %v", core.ErrExchange, err)
 	}
-	out, err := p.newSTS(p.cfg.Region).AssumeRoleWithWebIdentity(ctx, &sts.AssumeRoleWithWebIdentityInput{
-		RoleArn:          aws.String(p.cfg.RoleArn),
-		RoleSessionName:  aws.String("stratus"),
-		WebIdentityToken: aws.String(idToken),
-	})
+	provider := stscreds.NewWebIdentityRoleProvider(
+		sts.NewFromConfig(awsCfg),
+		p.cfg.RoleArn,
+		idTokenRetriever{ctx: ctx, idp: idp},
+	)
+	creds, err := provider.Retrieve(ctx)
 	if err != nil {
-		return fmt.Errorf("%w: aws assume role with web identity: %v", core.ErrExchange, err)
+		return fmt.Errorf("%w: aws AssumeRoleWithWebIdentity: %v", core.ErrExchange, err)
 	}
-	p.mu.Lock()
-	p.creds = out.Credentials
-	p.mu.Unlock()
+	p.creds, p.ok = creds, true
 	return nil
 }
 
-// Credentials returns the currently held temporary AWS credentials (used later
-// by the connection layer to populate the environment for the session).
-func (p *Provider) Credentials() *ststypes.Credentials {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.creds
-}
+func (p *Provider) IsAuthenticated() bool           { return p.ok && !p.creds.Expired() }
+func (p *Provider) Credentials() awssdk.Credentials { return p.creds }
 
-func (p *Provider) Logout(ctx context.Context) error {
-	p.mu.Lock()
-	p.creds = nil
-	p.mu.Unlock()
-	return nil
-}
-
-// --- Phase 3 / 4 ---
-func (p *Provider) ListInstances(ctx context.Context, accountID string) ([]core.Instance, error) {
-	return nil, core.ErrNotImplemented
+func (p *Provider) ListInstances(ctx context.Context, account string) ([]core.Instance, error) {
+	return nil, core.ErrNotImplemented // Phase 3: EC2 DescribeInstances
 }
 func (p *Provider) Connect(ctx context.Context, req core.ConnectRequest) (core.Session, error) {
-	return nil, core.ErrNotImplemented
+	return nil, core.ErrNotImplemented // Phase 4
+}
+func (p *Provider) Logout(ctx context.Context) error {
+	p.creds, p.ok = awssdk.Credentials{}, false
+	return nil
 }
 
-var _ core.ProviderConnector = (*Provider)(nil)
+func (p *Provider) GetAccount() (string, error) {
+	parts := strings.Split(p.cfg.RoleArn, ":")
+	if len(parts) >= 5 {
+		return parts[4], nil
+	}
+	return "", fmt.Errorf("aws: error getting account from role ARN")
+}

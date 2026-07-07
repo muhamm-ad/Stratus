@@ -11,16 +11,17 @@ type Account struct {
 
 // Instance is a connectable virtual machine, normalized across providers.
 type Instance struct {
-	ID         string
-	Name       string
-	State      string // running, stopped, pending, ...
-	Platform   string // "linux" or "windows"
-	PrivateIP  string
-	PublicIP   string
-	Region     string
-	OSUser     string // default OS login user, when known
-	LaunchTime time.Time
-	Tags       map[string]string
+	ID           string
+	Name         string
+	State        string // running, stopped, pending, ...
+	Platform     string // "linux" or "windows"
+	InstanceType string // machine size, e.g. t3.large / Standard_D4s_v5 / e2-standard-4
+	PrivateIP    string
+	PublicIP     string
+	Region       string
+	OSUser       string // default OS login user, when known
+	LaunchTime   time.Time
+	Tags         map[string]string
 }
 
 // IsRunning reports whether the instance can currently accept connections.

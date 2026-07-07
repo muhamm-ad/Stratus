@@ -3,15 +3,17 @@ export type ProviderID = "aws" | "azure" | "gcp";
 export type VMState = "running" | "stopped" | "transitioning" | "unknown";
 
 export interface VMInstance {
-  id: number;
+  id: string;         // cloud-native instance ID (e.g. i-0f3a9c12, /subscriptions/…, 12345)
   name: string;
   provider: ProviderID;
   region: string;
   state: VMState;
-  size: string;
+  size: string;       // instance type / machine type (e.g. t3.large, n2-standard-4)
+  platform: string;   // "linux" | "windows"
   privateIP: string;
-  iid: string;
-  tags: string[];
+  publicIP: string;
+  osUser: string;     // default login user (ec2-user, ubuntu, azureuser, …)
+  tags: string[];     // ["key:value", …]
   canConnect: boolean;
 }
 
@@ -23,7 +25,7 @@ export interface ConnectCheck {
 
 export interface Session {
   sid: string;
-  vmId: number;
+  vmId: string;       // matches VMInstance.id
   openedAt: number;
 }
 

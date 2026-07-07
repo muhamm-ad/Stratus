@@ -52,6 +52,10 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
+    void useAppStore.getState().init();
+  }, []);
+
+  useEffect(() => {
     const id = setInterval(() => useAppStore.getState().incrementTick(), 1000);
     return () => clearInterval(id);
   }, []);

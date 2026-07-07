@@ -18,7 +18,7 @@ function useResultLabel() {
   const ready = (k: ProviderID) => sso[k] === "connected" && !providerLoading[k] && !providerError[k];
   const anyLoading = connectedKeys.some(k => providerLoading[k]);
 
-  const matches = (vm: { provider: ProviderID; region: string; state: string; name: string; iid: string; tags: string[] }) => {
+  const matches = (vm: { provider: ProviderID; region: string; state: string; name: string; id: string; tags: string[] }) => {
     if (filterProvider !== "all" && vm.provider !== filterProvider) return false;
     if (filterRegion !== "all" && vm.region !== filterRegion) return false;
     if (filterTag && !vm.tags.some(t => t.includes(filterTag))) return false;
@@ -27,7 +27,7 @@ function useResultLabel() {
     }
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      if (!`${vm.name} ${vm.iid} ${vm.region} ${vm.tags.join(" ")}`.toLowerCase().includes(q)) return false;
+      if (!`${vm.name} ${vm.id} ${vm.region} ${vm.tags.join(" ")}`.toLowerCase().includes(q)) return false;
     }
     return true;
   };

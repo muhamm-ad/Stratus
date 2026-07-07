@@ -43,8 +43,8 @@ func Factories() map[ProviderID]Factory {
 
 // BuildAll constructs every provided factory from its matching config section
 // and returns them in a Registry. A provider whose section is missing or
-// invalid is reported in errs and skipped, so the app still runs with the
-// others. Pass core.Factories() in production; pass a controlled map in tests.
+// invalid is reported in errs and skipped, so the app still runs with the others.
+// Pass core.Factories() in production; pass a controlled map in tests.
 func BuildAll(factories map[ProviderID]Factory, sections map[string]json.RawMessage) (*Registry, []error) {
 	ids := make([]ProviderID, 0, len(factories))
 	for id := range factories {

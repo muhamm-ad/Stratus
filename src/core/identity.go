@@ -1,28 +1,35 @@
 package core
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
-// IdentityProvider performs the single interactive sign-in (Microsoft Entra ID)
-// and hands out the tokens that connectors exchange for cloud-specific
-// credentials. One browser login, then silent
-// derivation per provider.
+// DeviceCode is surfaced to the UI during the RFC 8628 device-authorization
+// fallback (headless / loopback-blocked environments).
+type DeviceCode struct {
+	UserCode        string
+	VerificationURI string
+	Interval        time.Duration
+}
+
+// IdentityProvider is any OIDC identity (Entra, Okta, Keycloak, …).
+// All token acquisition/refresh is delegated to golang.org/x/oauth2.
 type IdentityProvider interface {
 	// Login opens the browser ONCE (PKCE + loopback) and caches the Entra
 	// id_token / access_token / refresh_token.
-	Login(ctx context.Context) error
-
-	// IsAuthenticated reports whether a valid Entra session exists.
+	// onCode is called only when the device flow is used (nil-safe); the browser flow ignores it.
+	Login(ctx context.Context, onCode func(DeviceCode)) error
+	
+	// IsAuthenticated reports whether a valid OIDC session exists.
 	IsAuthenticated() bool
-
-	// IDToken returns the Entra id_token (JWT, aud = client_id), refreshing it
-	// silently if needed. Used by AWS (AssumeRoleWithWebIdentity) and GCP
-	// (STS token exchange).
+	// IDToken returns a valid (refreshed if needed) id_token for federation.
 	IDToken(ctx context.Context) (string, error)
-
-	// AccessToken silently acquires an access token for an arbitrary scope
-	// (e.g. the ARM scope for Azure) via the refresh token. No browser.
-	AccessToken(ctx context.Context, scope string) (string, error)
-
-	// Logout clears the cached Entra session.
+	// AccessToken silently acquires an access token for the given scopes via the
+	// refresh token (e.g. the Azure ARM scope). Only meaningful when the issuer
+	// can grant those scopes.
+	AccessToken(ctx context.Context, scopes ...string) (string, error)
+	
+	// Logout invalidates the OIDC session.
 	Logout(ctx context.Context) error
 }
