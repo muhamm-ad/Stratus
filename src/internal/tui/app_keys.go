@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"context"
-	"fmt"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -81,7 +79,7 @@ func (a *App) updateAppKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return a, nil
 	case key == "R":
 		return a, tea.Batch(
-			syncProviderCmds(a.gw, false)...
+			syncProviderCmds(a.svc, false)...
 		)
 	}
 
@@ -122,7 +120,7 @@ func (a *App) handleIntent(intent appIntent, cmd tea.Cmd) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, a.stopCmd(intent.targets)...)
 	case intentRefresh:
 		cmds = append(cmds,
-			syncProviderCmds(a.gw, false)...
+			syncProviderCmds(a.svc, false)...
 		)
 	}
 	if len(cmds) == 0 {
@@ -131,43 +129,43 @@ func (a *App) handleIntent(intent appIntent, cmd tea.Cmd) (tea.Model, tea.Cmd) {
 	return a, tea.Batch(cmds...)
 }
 
-func (a *App) connectCmd(targets []VM) []tea.Cmd {
-	gw := a.gw
+func (a *App) connectCmd(targets []VM) []tea.Cmd { // FIXME: Implement this
+	// svc := a.svc
 	var cmds []tea.Cmd
-	var opened, skipped int
-	for _, vm := range targets {
-		if !vm.CanConnect {
-			skipped++
-			continue
-		}
-		opened++
-		vm := vm
-		cmds = append(cmds, func() tea.Msg {
-			spec, err := gw.OpenSession(context.Background(), vm.ID)
-			if err != nil {
-				return connectErrMsg{vm: vm.Name, err: err}
-			}
-			return sessionOpenedMsg{spec: spec}
-		})
-	}
-	if opened > 0 || skipped > 0 {
-		msg := fmt.Sprintf("%d opened", opened)
-		if skipped > 0 {
-			msg += fmt.Sprintf(" · %d skipped (no permission)", skipped)
-		}
-		a.flash, a.flashKind = msg, "ok"
-		cmds = append(cmds, flashClearCmd())
-	}
+	// var opened, skipped int
+	// for _, vm := range targets {
+	// 	if !vm.CanConnect {
+	// 		skipped++
+	// 		continue
+	// 	}
+	// 	opened++
+	// 	vm := vm
+	// 	cmds = append(cmds, func() tea.Msg {
+	// 		spec, err := gw.OpenSession(context.Background(), vm.ID)
+	// 		if err != nil {
+	// 			return connectErrMsg{vm: vm.Name, err: err}
+	// 		}
+	// 		return sessionOpenedMsg{spec: spec}
+	// 	})
+	// }
+	// if opened > 0 || skipped > 0 {
+	// 	msg := fmt.Sprintf("%d opened", opened)
+	// 	if skipped > 0 {
+	// 		msg += fmt.Sprintf(" · %d skipped (no permission)", skipped)
+	// 	}
+	// 	a.flash, a.flashKind = msg, "ok"
+	// 	cmds = append(cmds, flashClearCmd())
+	// }
 	return cmds
 }
 
-func (a *App) stopCmd(targets []VM) []tea.Cmd {
-	for _, vm := range targets {
-		_ = a.gw.StopVM(context.Background(), vm.ID)
-	}
-	if len(targets) > 0 {
-		a.flash, a.flashKind = fmt.Sprintf("stop requested for %d vm(s)", len(targets)), "warn"
-	}
+func (a *App) stopCmd(targets []VM) []tea.Cmd { // FIXME: Implement this
+	// for _, vm := range targets {
+	// 	_ = a.gw.StopVM(context.Background(), vm.ID)
+	// }
+	// if len(targets) > 0 {
+	// 	a.flash, a.flashKind = fmt.Sprintf("stop requested for %d vm(s)", len(targets)), "warn"
+	// }
 	return []tea.Cmd{flashClearCmd()}
 }
 
@@ -252,7 +250,7 @@ func (a *App) runPaletteCommand(c command) tea.Cmd {
 		return cmd
 	case "refresh":
 		return tea.Batch(
-			syncProviderCmds(a.gw, false)...
+			syncProviderCmds(a.svc, false)...
 		)
 	case "logs":
 		a.showLogs = !a.showLogs
@@ -265,7 +263,7 @@ func (a *App) runPaletteCommand(c command) tea.Cmd {
 		a.overlay = overlayConfirmQuit
 	case "reconnect":
 		return tea.Batch(
-			syncProviderCmds(a.gw, false)...
+			syncProviderCmds(a.svc, false)...
 		)
 	case "region":
 		a.inv.cycleRegion()

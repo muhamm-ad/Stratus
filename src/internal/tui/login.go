@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/muhamm-ad/stratus/core"
+	"github.com/muhamm-ad/stratus/service"
 )
 
 type loginStep int
@@ -17,8 +18,7 @@ const (
 )
 
 type loginModel struct {
-	gw         *Gateway
-	idps       []GatwayeIdentityProvider
+	svc        *service.Service
 	cursor     int
 	step       loginStep
 	selected   string
@@ -28,9 +28,9 @@ type loginModel struct {
 	err        error
 }
 
-func newLoginModel(gw *Gateway) loginModel {
+func newLoginModel(svc *service.Service) loginModel {
 	sp := spinner.New(spinner.WithSpinner(spinner.Spinner{Frames: SpinnerFrames, FPS: 12}))
-	return loginModel{gw: gw, idps: gw.IdentityProviders(), spinner: sp}
+	return loginModel{svc: svc, spinner: sp}
 }
 
 // Not the Update function from the Model interface.
@@ -38,9 +38,10 @@ func newLoginModel(gw *Gateway) loginModel {
 func (m loginModel) Update(msg tea.KeyPressMsg, send func(tea.Msg)) (loginModel, tea.Cmd) {
 	switch m.step {
 	case stepSelect:
+		idpIDs := m.svc.IdentityProvidersIDs()
 		switch msg.String() {
 		case "j", "down":
-			if m.cursor < len(m.idps)-1 {
+			if m.cursor < len(idpIDs)-1 {
 				m.cursor++
 			}
 		case "k", "up":
@@ -48,16 +49,13 @@ func (m loginModel) Update(msg tea.KeyPressMsg, send func(tea.Msg)) (loginModel,
 				m.cursor--
 			}
 		case "enter":
-			idp := m.idps[m.cursor]
-			if !idp.Usable {
-				return m, nil
-			} // unusable IdP: no-op
-			m.selected = idp.Name
-			m.useDevice = idp.UseDeviceFlow
+			idpID := idpIDs[m.cursor]
+			m.selected = string(idpID)
+			m.useDevice = m.svc.IdentityUsesDeviceFlow(idpID)
 			m.deviceCode = core.DeviceCode{}
 			m.err = nil
 			m.step = stepWaiting
-			return m, tea.Batch(m.spinner.Tick, loginCmd(m.gw, core.IdentityProviderID(idp.Name), send))
+			return m, tea.Batch(m.spinner.Tick, loginCmd(m.svc, idpID, send))
 		}
 	case stepWaiting:
 		if msg.String() == "esc" {
@@ -76,17 +74,16 @@ func (m loginModel) View(s Styles, w, h int) string {
 	if m.step == stepSelect {
 		head := s.SectionHead.Render("SELECT IDENTITY PROVIDER")
 		var rows []string
-		for i, idp := range m.idps {
+		idpIDs := m.svc.IdentityProvidersIDs()
+		for i, idpID := range idpIDs {
 			cur := "  "
 			if i == m.cursor {
 				cur = s.Accent.Render("▸ ")
 			}
-			name := s.Text.Bold(true).Render(idp.Name)
-			desc := s.Dim.Render(" — " + idp.Description)
-			line := cur + name + desc
-			if !idp.Usable {
-				line += "  " + s.Warn.Render("needs Entra identity")
-			}
+			name := s.Text.Bold(true).Render(string(idpID))
+			// desc := s.Dim.Render(" — " + idp.Description)
+			// line := cur + name + desc
+			line := cur + name
 			rows = append(rows, line)
 		}
 		hint := s.Dim.Render("j/k move · ⏎ select")

@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/muhamm-ad/stratus/core"
+	"github.com/muhamm-ad/stratus/service"
 )
 
 // ---- messages -------------------------------------------------------------
@@ -42,9 +43,9 @@ type ggResetMsg struct{}
 
 // loginCmd wraps the blocking OIDC login in a tea.Cmd. The device code is not
 // returned here; it's pushed asynchronously via program.Send inside onCode.
-func loginCmd(gw *Gateway, idp core.IdentityProviderID, send func(tea.Msg)) tea.Cmd {
+func loginCmd(svc *service.Service, idpID core.IdentityProviderID, send func(tea.Msg)) tea.Cmd {
 	return func() tea.Msg {
-		idp, err := gw.svc.LoginWith(context.Background(), idp, func(dc core.DeviceCode) {
+		idp, err := svc.LoginWith(context.Background(), idpID, func(dc core.DeviceCode) {
 			send(deviceCodeMsg(dc)) // inject the code into the program from the callback
 		})
 		return loginResultMsg{identityProvider: idp, err: err}
@@ -52,8 +53,8 @@ func loginCmd(gw *Gateway, idp core.IdentityProviderID, send func(tea.Msg)) tea.
 }
 
 // syncProviderCmds loads all providers' VMs after a staggered delay
-func syncProviderCmds(gw *Gateway, delay bool) []tea.Cmd {
-	cloudProviders := gw.svc.CloudProviders()
+func syncProviderCmds(svc *service.Service, delay bool) []tea.Cmd {
+	cloudProviders := svc.CloudProviders()
 	cmds := make([]tea.Cmd, len(cloudProviders))
 
 	for i, cp := range cloudProviders {
@@ -63,11 +64,22 @@ func syncProviderCmds(gw *Gateway, delay bool) []tea.Cmd {
 			d = time.Duration(i+1) * 500 * time.Millisecond
 		}
 		cmds[i] = tea.Tick(d, func(time.Time) tea.Msg {
-			vms, err := gw.ListVMs(context.Background(), provider)
-			if err != nil {
-				return vmsLoadErrMsg{provider: provider, err: err}
+			// FIXME: Implement this
+			// vms, err := svc.ListVMs(context.Background(), provider)
+			vms_mock := []VM{
+				{
+					Name: "vm1",
+					ID: "vm1",
+					Provider: "aws",
+					Region: "us-east-1",
+					Type: "t2.micro",
+				},
 			}
-			return vmsLoadedMsg{provider: provider, vms: vms}
+			// if err != nil {
+			// 	return vmsLoadErrMsg{provider: provider, err: err}
+			// }
+			// return vmsLoadedMsg{provider: provider, vms: vms}
+			return vmsLoadedMsg{provider: provider, vms: vms_mock}
 		})
 	}
 	return cmds

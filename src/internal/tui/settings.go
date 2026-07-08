@@ -1,22 +1,32 @@
 package tui
 
 import (
+	"os/exec"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/muhamm-ad/stratus/service"
 )
+
+type CLIStatus struct {
+	Name     string // aws-cli, session-manager-plugin, az-cli, gcloud
+	Bin      string // for exec.LookPath
+	Detected bool
+	Hint     string // "install to connect"
+}
 
 // settingsModel renders providers, auto-refresh, theme, and LOCAL CLI DETECTION.
 type settingsModel struct {
-	gw          *Gateway
+	svc         *service.Service
 	cursor      int
 	autoRefresh bool
 	clis        []CLIStatus
 }
 
-func newSettingsModel(gw *Gateway) settingsModel {
-	return settingsModel{gw: gw, autoRefresh: true, clis: gw.DetectCLIs()}
+func newSettingsModel(svc *service.Service) settingsModel {
+	clis := detectCLIs()
+	return settingsModel{svc: svc, autoRefresh: true, clis: clis}
 }
 
 type settingsCmd struct{ themeIdx int }
@@ -77,4 +87,17 @@ func row(s Styles, selected bool, label, value string) string {
 		cur = s.Accent.Render("▸ ")
 	}
 	return cur + s.Text.Render(label+": ") + s.Dim.Render(value)
+}
+
+func detectCLIs() []CLIStatus {
+	det := func(name, bin, hint string) CLIStatus {
+		_, err := exec.LookPath(bin)
+		return CLIStatus{Name: name, Bin: bin, Detected: err == nil, Hint: hint}
+	}
+	return []CLIStatus{
+		det("aws-cli", "aws", "install to connect"),
+		det("session-manager-plugin", "session-manager-plugin", "install to connect"),
+		det("az-cli", "az", "install to connect"),
+		det("gcloud", "gcloud", "install to connect"),
+	}
 }

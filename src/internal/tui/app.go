@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/muhamm-ad/stratus/core"
+	"github.com/muhamm-ad/stratus/service"
 )
 
 type screen int
@@ -39,7 +40,7 @@ const (
 // sub-models. Only App implements the full tea.Model (its View returns tea.View);
 // sub-models return plain strings, as recommended for children in Bubble Tea v2.
 type App struct {
-	gw   *Gateway
+	svc   *service.Service
 	send func(tea.Msg) // program.Send, injected after NewProgram
 
 	width, height int
@@ -72,20 +73,20 @@ type App struct {
 	lastG time.Time // for multi-key "gg"
 }
 
-func New(gw *Gateway) *App {
+func New(svc *service.Service) *App {
 	th := Themes[0]
 	a := &App{
-		gw:       gw,
+		svc:      svc,
 		keys:     DefaultKeys(),
 		themeIdx: 0,
 		styles:   NewStyles(th),
 		screen:   screenLogin,
 	}
-	a.login = newLoginModel(gw)
-	a.inv = newInventoryModel(gw)
-	a.sess = newSessionsModel(gw)
-	a.audit = newAuditModel(gw)
-	a.settings = newSettingsModel(gw)
+	a.login = newLoginModel(svc)
+	a.inv = newInventoryModel(svc)
+	a.sess = newSessionsModel(svc)
+	a.audit = newAuditModel(svc)
+	a.settings = newSettingsModel(svc)
 	a.palette = newPaletteModel()
 	a.help = newHelpModel()
 	a.logs = newLogPane()
@@ -144,7 +145,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.flash, a.flashKind = "welcome, "+preferredUsername+" — signed in via "+string(msg.identityProvider.ID()), "ok"
 
 		cmds = append(cmds, flashClearCmd())
-		cmds = append(cmds, syncProviderCmds(a.gw, false)...)
+		cmds = append(cmds, syncProviderCmds(a.svc, false)...)
 		cmds = append(cmds, autoRefreshCmd())
 
 		return a, tea.Batch(cmds...)
@@ -171,7 +172,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, execSessionCmd(msg.spec)
 
 	case sessionClosedMsg:
-		a.gw.CloseSession(context.Background(), msg.id)
+		a.sess.CloseSession(context.Background(), msg.id)
 		a.logs.add("INFO", "session closed: "+msg.id)
 		a.flash, a.flashKind = "session closed", "ok"
 		return a, flashClearCmd()
@@ -182,7 +183,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case autoRefreshMsg:
 		if a.settings.autoRefresh {
-			cmds = append(cmds, syncProviderCmds(a.gw, true)...)
+			cmds = append(cmds, syncProviderCmds(a.svc, true)...)
 		}
 		cmds = append(cmds, autoRefreshCmd())
 		return a, tea.Batch(cmds...)

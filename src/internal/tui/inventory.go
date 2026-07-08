@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/table"
 	"charm.land/lipgloss/v2"
+	"github.com/muhamm-ad/stratus/service"
 )
 
 type sortKey int
@@ -22,7 +23,7 @@ const (
 )
 
 type inventoryModel struct {
-	gw       *Gateway
+	svc      *service.Service
 	all      []VM
 	view     []VM // after filters+sort
 	cursor   int
@@ -38,7 +39,7 @@ type inventoryModel struct {
 	sortAsc   bool
 }
 
-func newInventoryModel(gw *Gateway) inventoryModel {
+func newInventoryModel(svc *service.Service) inventoryModel {
 	t := table.New(table.WithColumns([]table.Column{
 		{Title: "", Width: 2},
 		{Title: "", Width: 2},
@@ -48,7 +49,7 @@ func newInventoryModel(gw *Gateway) inventoryModel {
 		{Title: "TYPE", Width: 18},
 		{Title: "STATE", Width: 12},
 	}))
-	return inventoryModel{gw: gw, marked: map[string]bool{}, tbl: t, sortAsc: true}
+	return inventoryModel{svc: svc, marked: map[string]bool{}, tbl: t, sortAsc: true}
 }
 
 func (m *inventoryModel) mergeProvider(provider string, vms []VM) {

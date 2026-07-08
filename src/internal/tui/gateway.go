@@ -1,25 +1,19 @@
+// FIXME: To be deleted after the session management is implemented and all the related code is updated
+
 package tui
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/muhamm-ad/stratus/core"
 	"github.com/muhamm-ad/stratus/service"
 )
 
-type GatwayeIdentityProvider struct {
-	Name          string
-	Description   string
-	Usable        bool
-	UseDeviceFlow bool   // true → RFC 8628; false → browser+loopback (default)
-	Constraint    string // e.g. "needs Entra identity"
-}
+
 
 type VMState string
 
@@ -47,64 +41,10 @@ type Activity struct {
 	Text string
 }
 
-// SessionSpec is what the TUI turns into an *exec.Cmd. The service decides the
-// method+args; the TUI just runs it via tea.ExecProcess. This keeps the CLI
-// invocation logic in the (provider-aware) service layer, not in the UI.
-type SessionSpec struct {
-	SessionID string
-	VMName    string
-	Provider  string
-	Bin       string   // "aws" | "az" | "gcloud"
-	Args      []string // full argv
-}
-
-type Session struct {
-	ID, Target, Provider, Method string
-	Opened                       time.Time
-}
-
-type AuditEntry struct {
-	When                       time.Time
-	User, VM, Provider, Method string
-	Success                    bool
-}
-
-type CLIStatus struct {
-	Name     string // aws-cli, session-manager-plugin, az-cli, gcloud
-	Bin      string // for exec.LookPath
-	Detected bool
-	Hint     string // "install to connect"
-}
 
 type Gateway struct {
-	svc      *service.Service
-	sessions []Session
-	audit    []AuditEntry
-	seq      int
-	mu       sync.Mutex
+	svc *service.Service
 }
-
-// NewGateway wraps a configured Service for the TUI.
-func NewGateway(svc *service.Service) *Gateway {
-	return &Gateway{svc: svc}
-}
-
-func (g *Gateway) IdentityProviders() []GatwayeIdentityProvider {
-	ids := g.svc.IdentityProvidersIDs()
-	out := make([]GatwayeIdentityProvider, len(ids))
-	for i, id := range ids {
-		out[i] = GatwayeIdentityProvider{
-			Name:          string(id),
-			Description:   "OpenID Connect",
-			Usable:        true,
-			UseDeviceFlow: g.svc.IdentityUsesDeviceFlow(id),
-		}
-	}
-	return out
-}
-
-// REVIEW: Check if this is needed
-// ---- VM inventory & sessions ----------------------------------------------
 
 func (g *Gateway) ListVMs(ctx context.Context, provider string) ([]VM, error) {
 	if provider == "" {
@@ -187,108 +127,3 @@ func mapInstanceState(s string) VMState {
 	}
 }
 
-// BuildSessionSpec constructs the native CLI argv for connecting to a VM.
-// Provider-specific knowledge lives here so the TUI only runs tea.ExecProcess.
-func BuildSessionSpec(vm VM, sessionID string) SessionSpec {
-	spec := SessionSpec{
-		SessionID: sessionID,
-		VMName:    vm.Name,
-		Provider:  vm.Provider,
-	}
-	switch vm.Provider {
-	case "aws":
-		spec.Bin, spec.Args = "aws", []string{
-			"ssm", "start-session", "--target", vm.ID, "--region", vm.Region,
-		}
-	case "azure":
-		spec.Bin, spec.Args = "az", []string{
-			"network", "bastion", "ssh",
-			"--name", "stratus-bastion", "--resource-group", "stratus-prod",
-			"--target-resource-id", vm.ID, "--auth-type", "AAD",
-		}
-	case "gcp":
-		spec.Bin, spec.Args = "gcloud", []string{
-			"compute", "ssh", vm.Name,
-			"--tunnel-through-iap", "--zone=" + vm.Region + "-a", "--project=stratus-dev",
-		}
-	}
-	if spec.Bin != "" {
-		if _, err := exec.LookPath(spec.Bin); err != nil {
-			spec.Bin, spec.Args = "sh", []string{"-c",
-				fmt.Sprintf("echo 'stratus: connected to %s via %s. type exit to return.'; exec ${SHELL:-sh}",
-					vm.Name, vm.Method)}
-		}
-	}
-	return spec
-}
-
-func (g *Gateway) OpenSession(ctx context.Context, vmID string) (SessionSpec, error) {
-	vms, err := g.ListVMs(ctx, "")
-	if err != nil {
-		return SessionSpec{}, err
-	}
-	var vm VM
-	for _, v := range vms {
-		if v.ID == vmID || v.Name == vmID {
-			vm = v
-			break
-		}
-	}
-	if vm.ID == "" {
-		return SessionSpec{}, fmt.Errorf("gateway: vm %q not found", vmID)
-	}
-	g.mu.Lock()
-	g.seq++
-	id := fmt.Sprintf("sess-%d", g.seq)
-	g.mu.Unlock()
-	spec := BuildSessionSpec(vm, id)
-	g.mu.Lock()
-	g.sessions = append(g.sessions, Session{
-		ID: id, Target: vm.Name, Provider: vm.Provider, Method: vm.Method, Opened: time.Now(),
-	})
-	g.mu.Unlock()
-	return spec, nil
-}
-
-func (g *Gateway) StopVM(ctx context.Context, vmID string) error { return nil }
-
-func (g *Gateway) CloseSession(ctx context.Context, sessionID string) error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	for i, s := range g.sessions {
-		if s.ID == sessionID {
-			g.sessions = append(g.sessions[:i], g.sessions[i+1:]...)
-			break
-		}
-	}
-	return nil
-}
-
-func (g *Gateway) Sessions() []Session {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	out := make([]Session, len(g.sessions))
-	copy(out, g.sessions)
-	return out
-}
-
-func (g *Gateway) AuditLog() []AuditEntry {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	out := make([]AuditEntry, len(g.audit))
-	copy(out, g.audit)
-	return out
-}
-
-func (g *Gateway) DetectCLIs() []CLIStatus {
-	det := func(name, bin, hint string) CLIStatus {
-		_, err := exec.LookPath(bin)
-		return CLIStatus{Name: name, Bin: bin, Detected: err == nil, Hint: hint}
-	}
-	return []CLIStatus{
-		det("aws-cli", "aws", "install to connect"),
-		det("session-manager-plugin", "session-manager-plugin", "install to connect"),
-		det("az-cli", "az", "install to connect"),
-		det("gcloud", "gcloud", "install to connect"),
-	}
-}

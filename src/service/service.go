@@ -53,13 +53,8 @@ func (s *Service) IdentityProvidersIDs() []core.IdentityProviderID {
 	return ids
 }
 
-func (s *Service) IdentityProviders() []core.IdentityProvider {
-	ids := s.IdentityProvidersIDs()
-	providers := make([]core.IdentityProvider, 0, len(ids))
-	for _, id := range ids {
-		providers = append(providers, s.idps[id])
-	}
-	return providers
+func (s *Service) IdentityProviders() map[core.IdentityProviderID]core.IdentityProvider {
+	return s.idps
 }
 
 // ActiveIdentity returns the name of the signed-in identity provider, or "".
@@ -197,11 +192,11 @@ func (s *Service) Connect(ctx context.Context, id core.CloudProviderID) error {
 
 // ListInstances returns connectable VMs for one account on a provider. (Phase 3.)
 func (s *Service) ListInstances(ctx context.Context, id core.CloudProviderID, account string) ([]core.Instance, error) {
-	c, ok := s.registry.Get(id)
+	cp, ok := s.registry.Get(id)
 	if !ok {
 		return nil, fmt.Errorf("service: unknown provider %q", id)
 	}
-	return c.ListInstances(ctx, account)
+	return cp.ListInstances(ctx, account)
 }
 
 // OpenSession opens an interactive session to one instance. (Phase 4.)
