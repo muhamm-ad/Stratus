@@ -15,7 +15,7 @@ type Gateway interface {
 	IdentityProviders() []IdP
 	LoginWith(ctx context.Context, name string, onDeviceCode func(core.DeviceCode)) (Identity, error)
 	ActiveIdentity() (Identity, bool)
-	ProviderUsable(provider string) (bool, core.IdentityConstraint)
+	ProviderUsable(provider string) (bool, core.CloudProviderConstraint)
 
 	// VM inventory & sessions (NEW — defined here, mocked below).
 	ListVMs(ctx context.Context, provider string) ([]VM, error) // provider "" = all
@@ -28,10 +28,11 @@ type Gateway interface {
 }
 
 type IdP struct {
-	Name        string
-	Description string
-	Usable      bool
-	Constraint  string // e.g. "needs Entra identity"
+	Name          string
+	Description   string
+	Usable        bool
+	UseDeviceFlow bool   // true → RFC 8628; false → browser+loopback (default)
+	Constraint    string // e.g. "needs Entra identity"
 }
 
 type Identity struct {
@@ -83,14 +84,14 @@ type Session struct {
 }
 
 type AuditEntry struct {
-	When              time.Time
+	When                       time.Time
 	User, VM, Provider, Method string
-	Success           bool
+	Success                    bool
 }
 
 type CLIStatus struct {
-	Name      string // aws-cli, session-manager-plugin, az-cli, gcloud
-	Bin       string // for exec.LookPath
-	Detected  bool
-	Hint      string // "install to connect"
+	Name     string // aws-cli, session-manager-plugin, az-cli, gcloud
+	Bin      string // for exec.LookPath
+	Detected bool
+	Hint     string // "install to connect"
 }

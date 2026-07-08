@@ -32,7 +32,12 @@ func (g *gateway) IdentityProviders() []IdP {
 	names := g.svc.IdentityProviders()
 	out := make([]IdP, len(names))
 	for i, name := range names {
-		out[i] = IdP{Name: name, Description: "Openid connect", Usable: true}
+		out[i] = IdP{
+			Name:          name,
+			Description:   "OpenID Connect",
+			Usable:        true,
+			UseDeviceFlow: g.svc.IdentityUsesDeviceFlow(name),
+		}
 	}
 	return out
 }
@@ -63,7 +68,7 @@ func (g *gateway) LoginWith(ctx context.Context, name string, onCode func(core.D
 
 func (g *gateway) buildIdentity(idpName string) Identity {
 	id := Identity{User: idpName, IdP: idpName, Provider: map[string]string{}}
-	for _, p := range g.svc.Providers() {
+	for _, p := range g.svc.CloudProviders() {
 		pid := string(p)
 		if g.svc.ProviderUsable(p) {
 			label := g.accounts[pid]
@@ -76,14 +81,14 @@ func (g *gateway) buildIdentity(idpName string) Identity {
 	return id
 }
 
-func (g *gateway) ProviderUsable(provider string) (bool, core.IdentityConstraint) {
-	return g.svc.ProviderUsable(core.ProviderID(provider)), nil
+func (g *gateway) ProviderUsable(provider string) (bool, core.CloudProviderConstraint) {
+	return g.svc.ProviderUsable(core.CloudProviderID(provider)), nil
 }
 
 func (g *gateway) ListVMs(ctx context.Context, provider string) ([]VM, error) {
 	if provider == "" {
 		var all []VM
-		for _, id := range g.svc.Providers() {
+		for _, id := range g.svc.CloudProviders() {
 			vms, err := g.listProvider(ctx, string(id))
 			if err != nil {
 				return nil, err
@@ -96,7 +101,7 @@ func (g *gateway) ListVMs(ctx context.Context, provider string) ([]VM, error) {
 }
 
 func (g *gateway) listProvider(ctx context.Context, provider string) ([]VM, error) {
-	pid := core.ProviderID(provider)
+	pid := core.CloudProviderID(provider)
 	if !g.svc.ProviderUsable(pid) {
 		return nil, fmt.Errorf("%w: %s incompatible with active identity", core.ErrExchange, provider)
 	}

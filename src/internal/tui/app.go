@@ -72,7 +72,7 @@ type App struct {
 }
 
 func New(gw Gateway) *App {
-	th := Themes[2]
+	th := Themes[0]
 	a := &App{
 		gw:     gw,
 		keys:   DefaultKeys(),
@@ -109,7 +109,6 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case tea.KeyPressMsg:
-		// Overlays capture keys first.
 		if s := msg.String(); s == "ctrl+c" {
 			return a, tea.Quit
 		}
@@ -130,6 +129,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case loginResultMsg:
 		if msg.err != nil {
 			a.login.err = msg.err
+			a.login.step = stepSelect
 			return a, nil
 		}
 		a.identity = msg.id
