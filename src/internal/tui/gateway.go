@@ -13,10 +13,71 @@ import (
 	"github.com/muhamm-ad/stratus/service"
 )
 
-// Gateway adapts *Service to the TUI-facing Gateway interface.
-type gateway struct {
+type GatwayeIdentityProvider struct {
+	Name          string
+	Description   string
+	Usable        bool
+	UseDeviceFlow bool   // true → RFC 8628; false → browser+loopback (default)
+	Constraint    string // e.g. "needs Entra identity"
+}
+
+type VMState string
+
+const (
+	StateRunning  VMState = "running"
+	StateStopped  VMState = "stopped"
+	StateStarting VMState = "starting"
+	StateStopping VMState = "stopping"
+	StateUnknown  VMState = "unknown"
+)
+
+type VM struct {
+	Name, ID, Provider, Region, Type string
+	State                            VMState
+	PrivateIP                        string
+	Method                           string // SSM / Bastion / IAP
+	Tags                             map[string]string
+	CanConnect                       bool
+	Recent                           []Activity
+}
+
+type Activity struct {
+	OK   bool
+	When time.Time
+	Text string
+}
+
+// SessionSpec is what the TUI turns into an *exec.Cmd. The service decides the
+// method+args; the TUI just runs it via tea.ExecProcess. This keeps the CLI
+// invocation logic in the (provider-aware) service layer, not in the UI.
+type SessionSpec struct {
+	SessionID string
+	VMName    string
+	Provider  string
+	Bin       string   // "aws" | "az" | "gcloud"
+	Args      []string // full argv
+}
+
+type Session struct {
+	ID, Target, Provider, Method string
+	Opened                       time.Time
+}
+
+type AuditEntry struct {
+	When                       time.Time
+	User, VM, Provider, Method string
+	Success                    bool
+}
+
+type CLIStatus struct {
+	Name     string // aws-cli, session-manager-plugin, az-cli, gcloud
+	Bin      string // for exec.LookPath
+	Detected bool
+	Hint     string // "install to connect"
+}
+
+type Gateway struct {
 	svc      *service.Service
-	accounts map[string]string // provider id -> account/subscription/project
 	sessions []Session
 	audit    []AuditEntry
 	seq      int
@@ -24,68 +85,28 @@ type gateway struct {
 }
 
 // NewGateway wraps a configured Service for the TUI.
-func NewGateway(svc *service.Service) Gateway {
-	return &gateway{svc: svc, accounts: svc.Accounts()}
+func NewGateway(svc *service.Service) *Gateway {
+	return &Gateway{svc: svc}
 }
 
-func (g *gateway) IdentityProviders() []IdP {
-	names := g.svc.IdentityProviders()
-	out := make([]IdP, len(names))
-	for i, name := range names {
-		out[i] = IdP{
-			Name:          name,
+func (g *Gateway) IdentityProviders() []GatwayeIdentityProvider {
+	ids := g.svc.IdentityProvidersIDs()
+	out := make([]GatwayeIdentityProvider, len(ids))
+	for i, id := range ids {
+		out[i] = GatwayeIdentityProvider{
+			Name:          string(id),
 			Description:   "OpenID Connect",
 			Usable:        true,
-			UseDeviceFlow: g.svc.IdentityUsesDeviceFlow(name),
+			UseDeviceFlow: g.svc.IdentityUsesDeviceFlow(id),
 		}
 	}
 	return out
 }
 
-func (g *gateway) ActiveIdentity() (Identity, bool) {
-	name := g.svc.ActiveIdentity()
-	if name == "" || !g.svc.IsAuthenticated() {
-		return Identity{}, false
-	}
-	return g.buildIdentity(name), true
-}
+// REVIEW: Check if this is needed
+// ---- VM inventory & sessions ----------------------------------------------
 
-func (g *gateway) LoginWith(ctx context.Context, name string, onCode func(core.DeviceCode)) (Identity, error) {
-	err := g.svc.LoginWith(ctx, name, func(dc core.DeviceCode) {
-		if onCode != nil {
-			onCode(core.DeviceCode{
-				UserCode:        dc.UserCode,
-				VerificationURI: dc.VerificationURI,
-				Interval:        dc.Interval,
-			})
-		}
-	})
-	if err != nil {
-		return Identity{}, err
-	}
-	return g.buildIdentity(name), nil
-}
-
-func (g *gateway) buildIdentity(idpName string) Identity {
-	id := Identity{User: idpName, IdP: idpName, Provider: map[string]string{}}
-	for _, p := range g.svc.CloudProviders() {
-		pid := string(p)
-		if g.svc.ProviderUsable(p) {
-			label := g.accounts[pid]
-			if label == "" {
-				label = "connected"
-			}
-			id.Provider[pid] = label
-		}
-	}
-	return id
-}
-
-func (g *gateway) ProviderUsable(provider string) (bool, core.CloudProviderConstraint) {
-	return g.svc.ProviderUsable(core.CloudProviderID(provider)), nil
-}
-
-func (g *gateway) ListVMs(ctx context.Context, provider string) ([]VM, error) {
+func (g *Gateway) ListVMs(ctx context.Context, provider string) ([]VM, error) {
 	if provider == "" {
 		var all []VM
 		for _, id := range g.svc.CloudProviders() {
@@ -100,7 +121,7 @@ func (g *gateway) ListVMs(ctx context.Context, provider string) ([]VM, error) {
 	return g.listProvider(ctx, provider)
 }
 
-func (g *gateway) listProvider(ctx context.Context, provider string) ([]VM, error) {
+func (g *Gateway) listProvider(ctx context.Context, provider string) ([]VM, error) {
 	pid := core.CloudProviderID(provider)
 	if !g.svc.ProviderUsable(pid) {
 		return nil, fmt.Errorf("%w: %s incompatible with active identity", core.ErrExchange, provider)
@@ -112,7 +133,7 @@ func (g *gateway) listProvider(ctx context.Context, provider string) ([]VM, erro
 		// Config/connection issues: return empty, not fatal.
 		return nil, nil
 	}
-	instances, err := g.svc.ListInstances(ctx, pid, g.accounts[provider])
+	instances, err := g.svc.ListInstances(ctx, pid, g.svc.Accounts()[pid])
 	if err != nil {
 		if errors.Is(err, core.ErrNotImplemented) {
 			return nil, nil
@@ -201,7 +222,7 @@ func BuildSessionSpec(vm VM, sessionID string) SessionSpec {
 	return spec
 }
 
-func (g *gateway) OpenSession(ctx context.Context, vmID string) (SessionSpec, error) {
+func (g *Gateway) OpenSession(ctx context.Context, vmID string) (SessionSpec, error) {
 	vms, err := g.ListVMs(ctx, "")
 	if err != nil {
 		return SessionSpec{}, err
@@ -229,9 +250,9 @@ func (g *gateway) OpenSession(ctx context.Context, vmID string) (SessionSpec, er
 	return spec, nil
 }
 
-func (g *gateway) StopVM(ctx context.Context, vmID string) error { return nil }
+func (g *Gateway) StopVM(ctx context.Context, vmID string) error { return nil }
 
-func (g *gateway) CloseSession(ctx context.Context, sessionID string) error {
+func (g *Gateway) CloseSession(ctx context.Context, sessionID string) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	for i, s := range g.sessions {
@@ -243,7 +264,7 @@ func (g *gateway) CloseSession(ctx context.Context, sessionID string) error {
 	return nil
 }
 
-func (g *gateway) Sessions() []Session {
+func (g *Gateway) Sessions() []Session {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	out := make([]Session, len(g.sessions))
@@ -251,7 +272,7 @@ func (g *gateway) Sessions() []Session {
 	return out
 }
 
-func (g *gateway) AuditLog() []AuditEntry {
+func (g *Gateway) AuditLog() []AuditEntry {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	out := make([]AuditEntry, len(g.audit))
@@ -259,7 +280,7 @@ func (g *gateway) AuditLog() []AuditEntry {
 	return out
 }
 
-func (g *gateway) DetectCLIs() []CLIStatus {
+func (g *Gateway) DetectCLIs() []CLIStatus {
 	det := func(name, bin, hint string) CLIStatus {
 		_, err := exec.LookPath(bin)
 		return CLIStatus{Name: name, Bin: bin, Detected: err == nil, Hint: hint}

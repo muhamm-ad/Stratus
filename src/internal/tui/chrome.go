@@ -1,7 +1,8 @@
 package tui
 
 import (
-	"fmt"
+	"context"
+	// "fmt"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -38,9 +39,12 @@ func (a *App) headerView() string {
 		a.tabLabel("4 settings", tabSettings),
 	}
 	tabBar := lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
-	user := a.styles.Dim.Render(a.identity.User)
-	if a.identity.IdP != "" {
-		user += a.styles.Dim.Render(" · " + a.identity.IdP)
+	userInfo, err := a.identity.UserInfo(context.Background())
+	var user string
+	if err != nil {
+		user = a.styles.Dim.Render("unknown")
+	} else {
+		user = a.styles.Dim.Render(userInfo["preferred_username"] + " · " + string(a.identity.ID()))
 	}
 	right := lipgloss.NewStyle().Width(max(0, a.width-lipgloss.Width(title)-lipgloss.Width(tabBar)-2)).Align(lipgloss.Right).Render(user)
 	return a.styles.Header.Width(a.width).Render(
@@ -118,17 +122,17 @@ func (a *App) statusBarView() string {
 	return a.styles.StatusBar.Width(a.width).Render(left + strings.Repeat(" ", gap) + right)
 }
 
-func (a *App) inventoryFilterLine() string {
-	return a.filterLineView()
-}
+// func (a *App) inventoryFilterLine() string {
+// 	return a.filterLineView()
+// }
 
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
+// func max(a, b int) int {
+// 	if a > b {
+// 		return a
+// 	}
+// 	return b
+// }
 
-func formatCount(n int, noun string) string {
-	return fmt.Sprintf("%d %s", n, noun)
-}
+// func formatCount(n int, noun string) string {
+// 	return fmt.Sprintf("%d %s", n, noun)
+// }

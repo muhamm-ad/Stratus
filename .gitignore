@@ -26,3 +26,4 @@ node_modules/
 # Other
 drafts/*
 myconfig.json
+*__debug_*

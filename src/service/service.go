@@ -23,19 +23,19 @@ import (
 // configured identity providers (all OIDC) and the cloud connectors. Exactly
 // one identity provider is "active" at a time — the one the user signed in with.
 type Service struct {
-	idps       map[string]core.IdentityProvider
-	activeName string // key into idps; "" means none chosen
-	registry   *core.Registry
+	idps             map[core.IdentityProviderID]core.IdentityProvider
+	activeIdentityID core.IdentityProviderID // key into idps; "" means none chosen
+	registry         *core.Registry
 }
 
 // NewService builds a Service from the configured identity providers and the
 // connector registry. When exactly one identity provider is configured it
 // becomes active automatically (no choice to make).
-func NewService(idps map[string]core.IdentityProvider, registry *core.Registry) *Service {
+func NewService(idps map[core.IdentityProviderID]core.IdentityProvider, registry *core.Registry) *Service {
 	s := &Service{idps: idps, registry: registry}
 	if len(idps) == 1 {
-		for name := range idps {
-			s.activeName = name
+		for id := range idps {
+			s.activeIdentityID = id
 			break
 		}
 	}
@@ -44,22 +44,35 @@ func NewService(idps map[string]core.IdentityProvider, registry *core.Registry) 
 
 // IdentityProviders lists the configured identity-provider names (e.g. "entra",
 // "okta") for the single-sign-on choice, sorted.
-func (s *Service) IdentityProviders() []string {
-	names := make([]string, 0, len(s.idps))
-	for name := range s.idps {
-		names = append(names, name)
+func (s *Service) IdentityProvidersIDs() []core.IdentityProviderID {
+	ids := make([]core.IdentityProviderID, 0, len(s.idps))
+	for id := range s.idps {
+		ids = append(ids, id)
 	}
-	sort.Strings(names)
-	return names
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	return ids
+}
+
+func (s *Service) IdentityProviders() []core.IdentityProvider {
+	ids := s.IdentityProvidersIDs()
+	providers := make([]core.IdentityProvider, 0, len(ids))
+	for _, id := range ids {
+		providers = append(providers, s.idps[id])
+	}
+	return providers
 }
 
 // ActiveIdentity returns the name of the signed-in identity provider, or "".
-func (s *Service) ActiveIdentity() string { return s.activeName }
+func (s *Service) ActiveIdentityProviderID() core.IdentityProviderID { return s.activeIdentityID }
+
+func (s *Service) ActiveIdentityProvider() core.IdentityProvider {
+	return s.idps[s.activeIdentityID]
+}
 
 // IdentityUsesDeviceFlow reports whether the named IdP is configured for RFC
 // 8628 device flow instead of the default browser+loopback flow.
-func (s *Service) IdentityUsesDeviceFlow(name string) bool {
-	idp, ok := s.idps[name]
+func (s *Service) IdentityUsesDeviceFlow(id core.IdentityProviderID) bool {
+	idp, ok := s.idps[id]
 	if !ok {
 		return false
 	}
@@ -69,58 +82,58 @@ func (s *Service) IdentityUsesDeviceFlow(name string) bool {
 	return false
 }
 
-// LoginWith signs in using a named identity provider (browser once) and makes
+// LoginWith signs in using an identity provider (browser once) and makes
 // it active. onCode is called only if the device flow is used (may be nil).
-func (s *Service) LoginWith(ctx context.Context, name string, onCode func(core.DeviceCode)) error {
-	idp, ok := s.idps[name]
+func (s *Service) LoginWith(ctx context.Context, id core.IdentityProviderID, onCode func(core.DeviceCode)) (core.IdentityProvider, error) {
+	idp, ok := s.idps[id]
 	if !ok {
-		return fmt.Errorf("service: unknown identity provider %q", name)
+		return nil, fmt.Errorf("service: unknown identity provider %q", id)
 	}
 	if err := idp.Login(ctx, onCode); err != nil {
-		return err
+		return nil, err
 	}
-	s.activeName = name
-	return nil
+	s.activeIdentityID = id
+	return idp, nil
 }
 
 // Login is a convenience for the common single-provider case. With several
 // providers configured it returns an error asking the caller to use LoginWith.
-func (s *Service) Login(ctx context.Context, onCode func(core.DeviceCode)) error {
+func (s *Service) Login(ctx context.Context, onCode func(core.DeviceCode)) (core.IdentityProvider, error) {
 	switch len(s.idps) {
 	case 0:
-		return errors.New("service: no identity provider configured")
+		return nil, errors.New("service: no identity provider configured")
 	case 1:
-		return s.LoginWith(ctx, s.IdentityProviders()[0], onCode)
+		return s.LoginWith(ctx, s.IdentityProvidersIDs()[0], onCode)
 	default:
-		return fmt.Errorf("service: multiple identity providers (%v) — use LoginWith", s.IdentityProviders())
+		return nil, fmt.Errorf("service: multiple identity providers (%v) — use LoginWith", s.IdentityProviders())
 	}
 }
 
 func (s *Service) IsAuthenticated() bool {
-	idp, ok := s.activeIDP()
+	idp, ok := s.activeIdentityProvider()
 	return ok && idp.IsAuthenticated()
 }
 
 func (s *Service) Logout(ctx context.Context) error {
-	idp, ok := s.activeIDP()
+	idp, ok := s.activeIdentityProvider()
 	if !ok {
 		return nil
 	}
 	err := idp.Logout(ctx)
-	s.activeName = ""
+	s.activeIdentityID = ""
 	return err
 }
 
-func (s *Service) activeIDP() (core.IdentityProvider, bool) {
-	if s.activeName == "" {
+func (s *Service) activeIdentityProvider() (core.IdentityProvider, bool) {
+	if s.activeIdentityID == "" {
 		return nil, false
 	}
-	idp, ok := s.idps[s.activeName]
+	idp, ok := s.idps[s.activeIdentityID]
 	return idp, ok
 }
 
 func (s *Service) requireActive() (core.IdentityProvider, error) {
-	idp, ok := s.activeIDP()
+	idp, ok := s.activeIdentityProvider()
 	if !ok {
 		return nil, core.ErrNotAuthenticated
 	}
@@ -131,8 +144,8 @@ func (s *Service) requireActive() (core.IdentityProvider, error) {
 func (s *Service) CloudProviders() []core.CloudProviderID { return s.registry.IDs() }
 
 // Accounts returns configured account/subscription/project IDs per provider.
-func (s *Service) Accounts() map[string]string {
-	out := make(map[string]string)
+func (s *Service) Accounts() map[core.CloudProviderID]string {
+	out := make(map[core.CloudProviderID]string)
 	for _, id := range s.registry.IDs() {
 		c, ok := s.registry.Get(id)
 		if !ok {
@@ -142,7 +155,7 @@ func (s *Service) Accounts() map[string]string {
 		if err != nil {
 			continue
 		}
-		out[string(id)] = account
+		out[id] = account
 	}
 	return out
 }
@@ -159,7 +172,7 @@ func (s *Service) ProviderUsable(id core.CloudProviderID) bool {
 	if !ok {
 		return true
 	}
-	idp, ok := s.activeIDP()
+	idp, ok := s.activeIdentityProvider()
 	if !ok {
 		return true
 	}
@@ -177,7 +190,7 @@ func (s *Service) Connect(ctx context.Context, id core.CloudProviderID) error {
 		return fmt.Errorf("service: unknown provider %q", id)
 	}
 	if con, ok := c.(core.CloudProviderConstraint); ok && !con.AcceptsIdentityIssuer(core.IssuerOf(idp)) {
-		return fmt.Errorf("service: %q requires a Microsoft Entra identity (active identity %q cannot obtain its credentials)", id, s.activeName)
+		return fmt.Errorf("service: %q requires a Microsoft Entra identity (active identity %q cannot obtain its credentials)", id, s.activeIdentityID)
 	}
 	return c.Authenticate(ctx, idp)
 }
@@ -210,19 +223,19 @@ func Init() (svc *Service, warnings []error, err error) {
 		return nil, nil, err
 	}
 
-	idps := make(map[string]core.IdentityProvider)
-	names := make([]string, 0, len(secs.Identity))
-	for name := range secs.Identity {
-		names = append(names, name)
+	idps := make(map[core.IdentityProviderID]core.IdentityProvider)
+	ids := make([]core.IdentityProviderID, 0, len(secs.Identity))
+	for id := range secs.Identity {
+		ids = append(ids, core.IdentityProviderID(id))
 	}
-	sort.Strings(names)
-	for _, name := range names {
-		cfg, perr := oidc.ParseConfig(secs.Identity[name])
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	for _, id := range ids {
+		cfg, perr := oidc.ParseConfig(secs.Identity[string(id)])
 		if perr != nil {
-			warnings = append(warnings, fmt.Errorf("identity %q: %w", name, perr))
+			warnings = append(warnings, fmt.Errorf("identity %q: %w", id, perr))
 			continue
 		}
-		idps[name] = oidc.New(name, cfg)
+		idps[id] = oidc.New(id, cfg)
 	}
 
 	reg, provWarn := core.BuildAll(core.Factories(), secs.Providers)

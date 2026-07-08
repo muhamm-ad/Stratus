@@ -12,8 +12,8 @@ import (
 
 type deviceCodeMsg core.DeviceCode
 type loginResultMsg struct {
-	id  Identity
-	err error
+	identityProvider core.IdentityProvider
+	err              error
 }
 type vmsLoadedMsg struct {
 	provider string
@@ -23,9 +23,16 @@ type vmsLoadErrMsg struct {
 	provider string
 	err      error
 }
-type providerSyncedMsg struct{ provider string; count int }
+type providerSyncedMsg struct {
+	provider string
+	count    int
+}
+
 type sessionOpenedMsg struct{ spec SessionSpec }
-type sessionClosedMsg struct{ id string; err error }
+type sessionClosedMsg struct {
+	id  string
+	err error
+}
 type flashClearMsg struct{}
 type tokenExpiredMsg struct{ provider string }
 type autoRefreshMsg time.Time
@@ -35,25 +42,35 @@ type ggResetMsg struct{}
 
 // loginCmd wraps the blocking OIDC login in a tea.Cmd. The device code is not
 // returned here; it's pushed asynchronously via program.Send inside onCode.
-func loginCmd(gw Gateway, name string, send func(tea.Msg)) tea.Cmd {
+func loginCmd(gw *Gateway, idp core.IdentityProviderID, send func(tea.Msg)) tea.Cmd {
 	return func() tea.Msg {
-		id, err := gw.LoginWith(context.Background(), name, func(dc core.DeviceCode) {
+		idp, err := gw.svc.LoginWith(context.Background(), idp, func(dc core.DeviceCode) {
 			send(deviceCodeMsg(dc)) // inject the code into the program from the callback
 		})
-		return loginResultMsg{id: id, err: err}
+		return loginResultMsg{identityProvider: idp, err: err}
 	}
 }
 
-// syncProviderCmd loads one provider's VMs after a staggered delay, matching the
-// mockup (aws ~700ms, gcp ~1100ms, azure ~1400ms).
-func syncProviderCmd(gw Gateway, provider string, delay time.Duration) tea.Cmd {
-	return tea.Tick(delay, func(time.Time) tea.Msg {
-		vms, err := gw.ListVMs(context.Background(), provider)
-		if err != nil {
-			return vmsLoadErrMsg{provider: provider, err: err}
+// syncProviderCmds loads all providers' VMs after a staggered delay
+func syncProviderCmds(gw *Gateway, delay bool) []tea.Cmd {
+	cloudProviders := gw.svc.CloudProviders()
+	cmds := make([]tea.Cmd, len(cloudProviders))
+
+	for i, cp := range cloudProviders {
+		provider := string(cp)
+		d := time.Duration(0)
+		if delay {
+			d = time.Duration(i+1) * 500 * time.Millisecond
 		}
-		return vmsLoadedMsg{provider: provider, vms: vms}
-	})
+		cmds[i] = tea.Tick(d, func(time.Time) tea.Msg {
+			vms, err := gw.ListVMs(context.Background(), provider)
+			if err != nil {
+				return vmsLoadErrMsg{provider: provider, err: err}
+			}
+			return vmsLoadedMsg{provider: provider, vms: vms}
+		})
+	}
+	return cmds
 }
 
 // execSessionCmd hands the terminal to the native CLI, then resumes the TUI.

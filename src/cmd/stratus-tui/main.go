@@ -11,7 +11,7 @@ import (
 
 // BuildTUIGateway wires the real service (providers via service.Init). Exits
 // with an error when config.json is missing or invalid — no mock fallback.
-func BuildTUIGateway() (tui.Gateway, error) {
+func BuildTUIGateway() (*tui.Gateway, error) {
 	svc, warnings, err := service.Init()
 	if err != nil {
 		return nil, err

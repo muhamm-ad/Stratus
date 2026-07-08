@@ -132,3 +132,49 @@ func (s *Session) Logout(ctx context.Context) error {
 	s.mu.Unlock()
 	return s.store.Clear()
 }
+
+// UserInfo returns OIDC claims for the signed-in user. It prefers the provider's
+// /userinfo endpoint when discovery is available, otherwise verified id_token claims.
+func (s *Session) UserInfo(ctx context.Context) (map[string]string, error) {
+	s.mu.Lock()
+	tok := s.tok
+	s.mu.Unlock()
+	if tok == nil {
+		return nil, core.ErrNotAuthenticated
+	}
+
+	if s.client.Provider != nil {
+		ui, err := s.client.Provider.UserInfo(ctx, s.client.OAuth.TokenSource(ctx, tok))
+		if err == nil {
+			var raw map[string]any
+			if err := ui.Claims(&raw); err == nil {
+				return stringifyClaims(raw), nil
+			}
+		}
+	}
+
+	id, err := s.IDToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if s.client.Verifier == nil {
+		return nil, fmt.Errorf("auth: cannot load user info without issuer discovery")
+	}
+	idt, err := s.client.Verifier.Verify(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	var raw map[string]any
+	if err := idt.Claims(&raw); err != nil {
+		return nil, err
+	}
+	return stringifyClaims(raw), nil
+}
+
+func stringifyClaims(m map[string]any) map[string]string {
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		out[k] = fmt.Sprint(v)
+	}
+	return out
+}

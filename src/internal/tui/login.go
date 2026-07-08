@@ -17,8 +17,8 @@ const (
 )
 
 type loginModel struct {
-	gw         Gateway
-	idps       []IdP
+	gw         *Gateway
+	idps       []GatwayeIdentityProvider
 	cursor     int
 	step       loginStep
 	selected   string
@@ -26,14 +26,15 @@ type loginModel struct {
 	deviceCode core.DeviceCode
 	useDevice  bool // from selected IdP; false → browser opens automatically
 	err        error
-
 }
 
-func newLoginModel(gw Gateway) loginModel {
+func newLoginModel(gw *Gateway) loginModel {
 	sp := spinner.New(spinner.WithSpinner(spinner.Spinner{Frames: SpinnerFrames, FPS: 12}))
 	return loginModel{gw: gw, idps: gw.IdentityProviders(), spinner: sp}
 }
 
+// Not the Update function from the Model interface.
+// Update is called manually when a key is pressed.
 func (m loginModel) Update(msg tea.KeyPressMsg, send func(tea.Msg)) (loginModel, tea.Cmd) {
 	switch m.step {
 	case stepSelect:
@@ -56,7 +57,7 @@ func (m loginModel) Update(msg tea.KeyPressMsg, send func(tea.Msg)) (loginModel,
 			m.deviceCode = core.DeviceCode{}
 			m.err = nil
 			m.step = stepWaiting
-			return m, tea.Batch(m.spinner.Tick, loginCmd(m.gw, idp.Name, send))
+			return m, tea.Batch(m.spinner.Tick, loginCmd(m.gw, core.IdentityProviderID(idp.Name), send))
 		}
 	case stepWaiting:
 		if msg.String() == "esc" {

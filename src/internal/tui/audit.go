@@ -8,12 +8,12 @@ import (
 )
 
 type auditModel struct {
-	gw     Gateway
+	gw     *Gateway
 	list   []AuditEntry
 	cursor int
 }
 
-func newAuditModel(gw Gateway) auditModel {
+func newAuditModel(gw *Gateway) auditModel {
 	return auditModel{gw: gw, list: gw.AuditLog()}
 }
 

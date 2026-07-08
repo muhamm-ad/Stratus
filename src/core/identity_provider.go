@@ -5,6 +5,9 @@ import (
 	"time"
 )
 
+// IdentityProviderID is a unique identifier for an identity provider.
+type IdentityProviderID string
+
 // DeviceCode is surfaced to the UI during the RFC 8628 device-authorization
 // fallback (headless / loopback-blocked environments).
 type DeviceCode struct {
@@ -16,6 +19,10 @@ type DeviceCode struct {
 // IdentityProvider is any OIDC identity (Entra, Okta, Keycloak, …).
 // All token acquisition/refresh is delegated to golang.org/x/oauth2.
 type IdentityProvider interface {
+
+	// ID returns the ID of the identity provider.
+	ID() IdentityProviderID
+
 	// Login opens the browser ONCE (PKCE + loopback) and caches the Entra
 	// id_token / access_token / refresh_token.
 	// onCode is called only when the device flow is used (nil-safe); the browser flow ignores it.
@@ -32,4 +39,7 @@ type IdentityProvider interface {
 	
 	// Logout invalidates the OIDC session.
 	Logout(ctx context.Context) error
+
+	// UserInfo returns the user info for the current session.
+	UserInfo(ctx context.Context) (map[string]string, error)
 }

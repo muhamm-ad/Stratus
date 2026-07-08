@@ -22,7 +22,7 @@ const (
 )
 
 type inventoryModel struct {
-	gw       Gateway
+	gw       *Gateway
 	all      []VM
 	view     []VM // after filters+sort
 	cursor   int
@@ -38,7 +38,7 @@ type inventoryModel struct {
 	sortAsc   bool
 }
 
-func newInventoryModel(gw Gateway) inventoryModel {
+func newInventoryModel(gw *Gateway) inventoryModel {
 	t := table.New(table.WithColumns([]table.Column{
 		{Title: "", Width: 2},
 		{Title: "", Width: 2},

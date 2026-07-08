@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -38,7 +39,7 @@ const (
 // sub-models. Only App implements the full tea.Model (its View returns tea.View);
 // sub-models return plain strings, as recommended for children in Bubble Tea v2.
 type App struct {
-	gw   Gateway
+	gw   *Gateway
 	send func(tea.Msg) // program.Send, injected after NewProgram
 
 	width, height int
@@ -62,7 +63,7 @@ type App struct {
 
 	flash     string
 	flashKind string // ok|warn|err
-	identity  Identity
+	identity  core.IdentityProvider
 	banners   []string // error banners (e.g. gcp session expired)
 
 	searchMode bool
@@ -71,14 +72,14 @@ type App struct {
 	lastG time.Time // for multi-key "gg"
 }
 
-func New(gw Gateway) *App {
+func New(gw *Gateway) *App {
 	th := Themes[0]
 	a := &App{
-		gw:     gw,
-		keys:   DefaultKeys(),
+		gw:       gw,
+		keys:     DefaultKeys(),
 		themeIdx: 0,
-		styles: NewStyles(th),
-		screen: screenLogin,
+		styles:   NewStyles(th),
+		screen:   screenLogin,
 	}
 	a.login = newLoginModel(gw)
 	a.inv = newInventoryModel(gw)
@@ -132,17 +133,20 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.login.step = stepSelect
 			return a, nil
 		}
-		a.identity = msg.id
+		a.identity = msg.identityProvider
 		a.screen = screenApp
-		a.flash, a.flashKind = "welcome, "+msg.id.User+" — signed in via "+msg.id.IdP, "ok"
-		// Kick off staggered per-provider sync (aws→gcp→azure).
-		cmds = append(cmds,
-			flashClearCmd(),
-			syncProviderCmd(a.gw, "aws", 700*time.Millisecond),
-			syncProviderCmd(a.gw, "gcp", 1100*time.Millisecond),
-			syncProviderCmd(a.gw, "azure", 1400*time.Millisecond),
-			autoRefreshCmd(),
-		)
+		userInfo, err := msg.identityProvider.UserInfo(context.Background())
+		if err != nil {
+			a.flash, a.flashKind = "error: "+err.Error(), "err"
+			return a, flashClearCmd()
+		}
+		preferredUsername := userInfo["preferred_username"]
+		a.flash, a.flashKind = "welcome, "+preferredUsername+" — signed in via "+string(msg.identityProvider.ID()), "ok"
+
+		cmds = append(cmds, flashClearCmd())
+		cmds = append(cmds, syncProviderCmds(a.gw, false)...)
+		cmds = append(cmds, autoRefreshCmd())
+
 		return a, tea.Batch(cmds...)
 
 	case vmsLoadedMsg:
@@ -167,7 +171,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, execSessionCmd(msg.spec)
 
 	case sessionClosedMsg:
-		a.gw.CloseSession(nil, msg.id)
+		a.gw.CloseSession(context.Background(), msg.id)
 		a.logs.add("INFO", "session closed: "+msg.id)
 		a.flash, a.flashKind = "session closed", "ok"
 		return a, flashClearCmd()
@@ -178,15 +182,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case autoRefreshMsg:
 		if a.settings.autoRefresh {
-			cmds = append(cmds,
-				syncProviderCmd(a.gw, "aws", 0),
-				syncProviderCmd(a.gw, "gcp", 0),
-				syncProviderCmd(a.gw, "azure", 0),
-				autoRefreshCmd(),
-			)
-		} else {
-			cmds = append(cmds, autoRefreshCmd())
+			cmds = append(cmds, syncProviderCmds(a.gw, true)...)
 		}
+		cmds = append(cmds, autoRefreshCmd())
 		return a, tea.Batch(cmds...)
 
 	case tokenExpiredMsg:

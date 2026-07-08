@@ -9,12 +9,12 @@ import (
 )
 
 type sessionsModel struct {
-	gw     Gateway
+	gw     *Gateway
 	list   []Session
 	cursor int
 }
 
-func newSessionsModel(gw Gateway) sessionsModel {
+func newSessionsModel(gw *Gateway) sessionsModel {
 	return sessionsModel{gw: gw, list: gw.Sessions()}
 }
 

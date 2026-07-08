@@ -9,13 +9,13 @@ import (
 
 // settingsModel renders providers, auto-refresh, theme, and LOCAL CLI DETECTION.
 type settingsModel struct {
-	gw          Gateway
+	gw          *Gateway
 	cursor      int
 	autoRefresh bool
 	clis        []CLIStatus
 }
 
-func newSettingsModel(gw Gateway) settingsModel {
+func newSettingsModel(gw *Gateway) settingsModel {
 	return settingsModel{gw: gw, autoRefresh: true, clis: gw.DetectCLIs()}
 }
 

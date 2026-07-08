@@ -8,22 +8,35 @@ import (
 	"github.com/muhamm-ad/stratus/core/auth"
 )
 
+// IdentityProviderID is a unique identifier for an identity provider.
+type IdentityProviderID string
+
+const (
+	IdentityProviderIDEntra    IdentityProviderID = "entra"
+	IdentityProviderIDOkta     IdentityProviderID = "okta"
+	IdentityProviderIDKeycloak IdentityProviderID = "keycloak"
+	IdentityProviderIDAuth0    IdentityProviderID = "auth0"
+	IdentityProviderIDCustom   IdentityProviderID = "custom"
+)
+
 // OIDCIdentityProvider is the generic OIDC identity provider. It lazily builds an
 // auth.Client (discovery via go-oidc when an issuer is set) and delegates the
 // login/refresh lifecycle to auth.Session.
 type OIDCIdentityProvider struct {
-	name string
-	cfg  Config
+	id  core.IdentityProviderID
+	cfg Config
 
 	mu   sync.Mutex
 	sess *auth.Session
 }
 
-func New(name string, cfg Config) *OIDCIdentityProvider {
-	return &OIDCIdentityProvider{name: name, cfg: cfg}
+func New(id core.IdentityProviderID, cfg Config) *OIDCIdentityProvider {
+	return &OIDCIdentityProvider{id: id, cfg: cfg}
 }
 
 var _ core.IdentityProvider = (*OIDCIdentityProvider)(nil)
+
+func (p *OIDCIdentityProvider) ID() core.IdentityProviderID { return p.id }
 
 func (p *OIDCIdentityProvider) ensure(ctx context.Context) (*auth.Session, error) {
 	p.mu.Lock()
@@ -43,7 +56,7 @@ func (p *OIDCIdentityProvider) ensure(ctx context.Context) (*auth.Session, error
 	} else {
 		client = auth.NewClientManual(p.cfg.ClientID, p.cfg.AuthorizeEndpoint, p.cfg.TokenEndpoint, p.cfg.scopes())
 	}
-	store := auth.Store{Service: "stratus", Key: "oidc:" + p.name}
+	store := auth.Store{Service: "stratus", Key: "oidc:" + string(p.id)}
 	p.sess = auth.NewSession(client, store, p.cfg.UseDeviceFlow)
 	return p.sess, nil
 }
@@ -62,7 +75,7 @@ func (p *OIDCIdentityProvider) IsAuthenticated() bool {
 	p.mu.Unlock()
 	if s == nil {
 		// Peek the keychain without building a client (no network).
-		t, _, err := (auth.Store{Service: "stratus", Key: "oidc:" + p.name}).Load()
+		t, _, err := (auth.Store{Service: "stratus", Key: "oidc:" + string(p.id)}).Load()
 		return err == nil && t.Valid()
 	}
 	return s.IsAuthenticated()
@@ -87,7 +100,7 @@ func (p *OIDCIdentityProvider) AccessToken(ctx context.Context, scopes ...string
 func (p *OIDCIdentityProvider) Logout(ctx context.Context) error {
 	s, err := p.ensure(ctx)
 	if err != nil {
-		return (auth.Store{Service: "stratus", Key: "oidc:" + p.name}).Clear()
+		return (auth.Store{Service: "stratus", Key: "oidc:" + string(p.id)}).Clear()
 	}
 	return s.Logout(ctx)
 }
@@ -99,3 +112,11 @@ func (p *OIDCIdentityProvider) Issuer() string { return p.cfg.Issuer }
 
 // UsesDeviceFlow reports whether RFC 8628 device flow is forced for this IdP.
 func (p *OIDCIdentityProvider) UsesDeviceFlow() bool { return p.cfg.UseDeviceFlow }
+
+func (p *OIDCIdentityProvider) UserInfo(ctx context.Context) (map[string]string, error) {
+	s, err := p.ensure(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return s.UserInfo(ctx)
+}

@@ -81,9 +81,7 @@ func (a *App) updateAppKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return a, nil
 	case key == "R":
 		return a, tea.Batch(
-			syncProviderCmd(a.gw, "aws", 0),
-			syncProviderCmd(a.gw, "gcp", 0),
-			syncProviderCmd(a.gw, "azure", 0),
+			syncProviderCmds(a.gw, false)...
 		)
 	}
 
@@ -124,9 +122,7 @@ func (a *App) handleIntent(intent appIntent, cmd tea.Cmd) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, a.stopCmd(intent.targets)...)
 	case intentRefresh:
 		cmds = append(cmds,
-			syncProviderCmd(a.gw, "aws", 0),
-			syncProviderCmd(a.gw, "gcp", 0),
-			syncProviderCmd(a.gw, "azure", 0),
+			syncProviderCmds(a.gw, false)...
 		)
 	}
 	if len(cmds) == 0 {
@@ -256,9 +252,7 @@ func (a *App) runPaletteCommand(c command) tea.Cmd {
 		return cmd
 	case "refresh":
 		return tea.Batch(
-			syncProviderCmd(a.gw, "aws", 0),
-			syncProviderCmd(a.gw, "gcp", 0),
-			syncProviderCmd(a.gw, "azure", 0),
+			syncProviderCmds(a.gw, false)...
 		)
 	case "logs":
 		a.showLogs = !a.showLogs
@@ -271,9 +265,7 @@ func (a *App) runPaletteCommand(c command) tea.Cmd {
 		a.overlay = overlayConfirmQuit
 	case "reconnect":
 		return tea.Batch(
-			syncProviderCmd(a.gw, "aws", 0),
-			syncProviderCmd(a.gw, "gcp", 0),
-			syncProviderCmd(a.gw, "azure", 0),
+			syncProviderCmds(a.gw, false)...
 		)
 	case "region":
 		a.inv.cycleRegion()
