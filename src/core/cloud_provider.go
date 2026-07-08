@@ -1,28 +1,22 @@
 // Package core defines the provider-agnostic domain model and the
-// ProviderConnector contract that every cloud provider (AWS, Azure, GCP)
+// CloudProvider contract that every cloud provider (AWS, Azure, GCP)
 // implements. It must not import any provider-specific package: the
 // dependency direction is always connectors -> core, never the reverse.
 package core
 
 import "context"
 
-// ProviderID identifies a cloud provider.
-type ProviderID string
+// CloudProviderID identifies a cloud provider.
+type CloudProviderID string
 
-const (
-	ProviderAWS   ProviderID = "aws"
-	ProviderAzure ProviderID = "azure"
-	ProviderGCP   ProviderID = "gcp"
-)
-
-// ProviderConnector is the contract implemented by every provider. The UI and
+// CloudProvider is the contract implemented by every provider. The UI and
 // orchestration layers depend only on this interface, so adding a new cloud
 // means adding a new implementation, not touching callers.
-type ProviderConnector interface {
-	// ID returns the provider this connector talks to.
-	ID() ProviderID
+type CloudProvider interface {
+	// ID returns the provider this cloud provider talks to.
+	ID() CloudProviderID
 
-	// Authenticate dérive les identifiants du provider à partir de l'identité
+	// Authenticate dérive les identifiants du cloud provider à partir de l'identité
 	// déjà établie. Aucun navigateur : appel HTTPS silencieux.
 	Authenticate(ctx context.Context, idp IdentityProvider) error
 
@@ -38,6 +32,6 @@ type ProviderConnector interface {
 	// Logout clears tokens and any cached credentials.
 	Logout(ctx context.Context) error
 
-	// GetAccount returns the account/subscription/project ID from the connector's configuration.
+	// GetAccount returns the account/subscription/project ID from the cloud provider's configuration.
 	GetAccount() (string, error)
 }

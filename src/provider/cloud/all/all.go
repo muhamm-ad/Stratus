@@ -7,7 +7,7 @@
 package all
 
 import (
-	_ "github.com/muhamm-ad/stratus/providers/aws"
-	_ "github.com/muhamm-ad/stratus/providers/azure"
-	_ "github.com/muhamm-ad/stratus/providers/gcp"
+	_ "github.com/muhamm-ad/stratus/provider/cloud/aws"
+	_ "github.com/muhamm-ad/stratus/provider/cloud/azure"
+	_ "github.com/muhamm-ad/stratus/provider/cloud/gcp"
 )

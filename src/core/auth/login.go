@@ -2,19 +2,29 @@ package auth
 
 import (
 	"context"
+	// "fmt"
+	// "os"
 	"time"
 
 	"github.com/int128/oauth2cli"
+	"github.com/pkg/browser"
 	"golang.org/x/oauth2"
 
 	"github.com/muhamm-ad/stratus/core"
 )
 
-// BrowserLogin runs the RFC 8252 flow: oauth2cli spins up a loopback server on
-// 127.0.0.1, opens the system browser, handles the state check, and we add PKCE
-// (S256) via x/oauth2's built-in verifier helpers.
+// BrowserLogin runs the RFC 8252 flow. oauth2cli spins up a loopback server on
+// 127.0.0.1 and BLOCKS in GetToken until the callback arrives — but it does NOT
+// open the browser itself. We listen on its ready channel and open the system
+// browser (with a printed fallback URL). PKCE (S256) is added via x/oauth2.
 func (c *Client) BrowserLogin(ctx context.Context) (*oauth2.Token, error) {
+	// Local context so the opener goroutine is torn down when GetToken returns.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	verifier := oauth2.GenerateVerifier()
+	ready := make(chan string, 1) // buffered: never block oauth2cli's send
+
 	cfg := oauth2cli.Config{
 		OAuth2Config: c.OAuth,
 		AuthCodeOptions: []oauth2.AuthCodeOption{
@@ -25,7 +35,18 @@ func (c *Client) BrowserLogin(ctx context.Context) (*oauth2.Token, error) {
 			oauth2.VerifierOption(verifier),
 		},
 		LocalServerBindAddress: []string{"127.0.0.1:0"}, // ephemeral loopback port
+		LocalServerReadyChan:   ready,
 	}
+
+	go func() {
+		select {
+		case url := <-ready:
+			// fmt.Fprintf(os.Stderr, "\nOpening your browser to sign in.\nIf it does not open, visit:\n  %s\n\n", url)
+			_ = browser.OpenURL(url)
+		case <-ctx.Done():
+		}
+	}()
+
 	return oauth2cli.GetToken(ctx, cfg)
 }
 

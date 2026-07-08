@@ -11,17 +11,17 @@ import (
 // of config.json). Provider packages register one in init(); adding a new cloud
 // provider is therefore a new package that calls RegisterProvider plus a blank
 // import — no change to core or to the app wiring.
-type Factory func(raw json.RawMessage) (ProviderConnector, error)
+type Factory func(raw json.RawMessage) (CloudProvider, error)
 
 var (
 	factoriesMu sync.RWMutex
-	factories   = map[ProviderID]Factory{}
+	factories   = map[CloudProviderID]Factory{}
 )
 
 // RegisterProvider adds a provider factory to the global catalog. Call it from
 // a provider package's init(). Registering the same ID twice is a programming
 // error and panics.
-func RegisterProvider(id ProviderID, f Factory) {
+func RegisterProvider(id CloudProviderID, f Factory) {
 	factoriesMu.Lock()
 	defer factoriesMu.Unlock()
 	if _, dup := factories[id]; dup {
@@ -31,10 +31,10 @@ func RegisterProvider(id ProviderID, f Factory) {
 }
 
 // Factories returns a copy of the registered factory catalog (safe to range).
-func Factories() map[ProviderID]Factory {
+func Factories() map[CloudProviderID]Factory {
 	factoriesMu.RLock()
 	defer factoriesMu.RUnlock()
-	out := make(map[ProviderID]Factory, len(factories))
+	out := make(map[CloudProviderID]Factory, len(factories))
 	for id, f := range factories {
 		out[id] = f
 	}
@@ -45,8 +45,8 @@ func Factories() map[ProviderID]Factory {
 // and returns them in a Registry. A provider whose section is missing or
 // invalid is reported in errs and skipped, so the app still runs with the others.
 // Pass core.Factories() in production; pass a controlled map in tests.
-func BuildAll(factories map[ProviderID]Factory, sections map[string]json.RawMessage) (*Registry, []error) {
-	ids := make([]ProviderID, 0, len(factories))
+func BuildAll(factories map[CloudProviderID]Factory, sections map[string]json.RawMessage) (*Registry, []error) {
+	ids := make([]CloudProviderID, 0, len(factories))
 	for id := range factories {
 		ids = append(ids, id)
 	}

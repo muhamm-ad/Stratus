@@ -31,12 +31,21 @@ func NewClient(ctx context.Context, issuer, clientID string, scopes []string) (*
 	if err != nil {
 		return nil, fmt.Errorf("oidc discovery %q: %w", issuer, err)
 	}
+	// go-oidc's Endpoint() returns only auth+token URLs; pull the device
+	// endpoint from the discovery document so the RFC 8628 fallback works.
+	var extra struct {
+		DeviceAuthURL string `json:"device_authorization_endpoint"`
+	}
+	_ = p.Claims(&extra)
+	ep := p.Endpoint()
+	ep.DeviceAuthURL = extra.DeviceAuthURL
+
 	return &Client{
 		Provider: p,
 		Verifier: p.Verifier(&oidc.Config{ClientID: clientID}),
 		OAuth: oauth2.Config{
 			ClientID: clientID,
-			Endpoint: p.Endpoint(),
+			Endpoint: ep,
 			Scopes:   scopes,
 		},
 	}, nil

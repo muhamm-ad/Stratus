@@ -20,17 +20,19 @@ func (s subjectTokenSupplier) SubjectToken(ctx context.Context, _ externalaccoun
 	return s.idp.IDToken(ctx)
 }
 
-type Provider struct {
+const ProviderID core.CloudProviderID = "gcp"
+
+type GCPProvider struct {
 	cfg   Config
 	token string
 	ok    bool
 }
 
-func New(cfg Config) *Provider { return &Provider{cfg: cfg} }
+func New(cfg Config) *GCPProvider { return &GCPProvider{cfg: cfg} }
 
-func (p *Provider) ID() core.ProviderID { return core.ProviderGCP }
+func (p *GCPProvider) ID() core.CloudProviderID { return ProviderID }
 
-func (p *Provider) Authenticate(ctx context.Context, idp core.IdentityProvider) error {
+func (p *GCPProvider) Authenticate(ctx context.Context, idp core.IdentityProvider) error {
 	ts, err := externalaccount.NewTokenSource(ctx, externalaccount.Config{
 		Audience:                 p.cfg.WorkforceAudience,
 		SubjectTokenType:         "urn:ietf:params:oauth:token-type:jwt",
@@ -50,17 +52,17 @@ func (p *Provider) Authenticate(ctx context.Context, idp core.IdentityProvider) 
 	return nil
 }
 
-func (p *Provider) IsAuthenticated() bool { return p.ok }
-func (p *Provider) AccessToken() string   { return p.token }
+func (p *GCPProvider) IsAuthenticated() bool { return p.ok }
+func (p *GCPProvider) AccessToken() string   { return p.token }
 
-func (p *Provider) ListInstances(ctx context.Context, account string) ([]core.Instance, error) {
+func (p *GCPProvider) ListInstances(ctx context.Context, account string) ([]core.Instance, error) {
 	return nil, core.ErrNotImplemented // Phase 3: Compute aggregatedList
 }
-func (p *Provider) Connect(ctx context.Context, req core.ConnectRequest) (core.Session, error) {
+func (p *GCPProvider) Connect(ctx context.Context, req core.ConnectRequest) (core.Session, error) {
 	return nil, core.ErrNotImplemented // Phase 4
 }
-func (p *Provider) Logout(ctx context.Context) error { p.token, p.ok = "", false; return nil }
+func (p *GCPProvider) Logout(ctx context.Context) error { p.token, p.ok = "", false; return nil }
 
-func (p *Provider) GetAccount() (string, error) {
+func (p *GCPProvider) GetAccount() (string, error) {
 	return p.cfg.WorkforcePoolUserProject, nil
 }

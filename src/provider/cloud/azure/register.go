@@ -1,4 +1,4 @@
-package gcp
+package azure
 
 import (
 	"encoding/json"
@@ -8,7 +8,7 @@ import (
 )
 
 func init() {
-	core.RegisterProvider(core.ProviderGCP, func(raw json.RawMessage) (core.ProviderConnector, error) {
+	core.RegisterProvider(ProviderID, func(raw json.RawMessage) (core.CloudProvider, error) {
 		cfg, err := ParseConfig(raw, os.Getenv)
 		if err != nil {
 			return nil, err

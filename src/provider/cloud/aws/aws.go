@@ -28,20 +28,22 @@ func (r idTokenRetriever) GetIdentityToken() ([]byte, error) {
 	return []byte(t), nil
 }
 
-// Provider federates the OIDC id_token to AWS via STS
+const ProviderID core.CloudProviderID = "aws"
+
+// AWSProvider federates the OIDC id_token to AWS via STS
 // AssumeRoleWithWebIdentity, using the SDK's built-in web-identity provider
 // (handles caching + refresh).
-type Provider struct {
+type AWSProvider struct {
 	cfg   Config
 	creds awssdk.Credentials
 	ok    bool
 }
 
-func New(cfg Config) *Provider { return &Provider{cfg: cfg} }
+func New(cfg Config) *AWSProvider { return &AWSProvider{cfg: cfg} }
 
-func (p *Provider) ID() core.ProviderID { return core.ProviderAWS }
+func (p *AWSProvider) ID() core.CloudProviderID { return ProviderID }
 
-func (p *Provider) Authenticate(ctx context.Context, idp core.IdentityProvider) error {
+func (p *AWSProvider) Authenticate(ctx context.Context, idp core.IdentityProvider) error {
 	awsCfg, err := awsconfig.LoadDefaultConfig(ctx,
 		awsconfig.WithRegion(p.cfg.Region),
 		awsconfig.WithCredentialsProvider(awssdk.AnonymousCredentials{}), // web-identity call is unsigned
@@ -62,21 +64,21 @@ func (p *Provider) Authenticate(ctx context.Context, idp core.IdentityProvider) 
 	return nil
 }
 
-func (p *Provider) IsAuthenticated() bool           { return p.ok && !p.creds.Expired() }
-func (p *Provider) Credentials() awssdk.Credentials { return p.creds }
+func (p *AWSProvider) IsAuthenticated() bool           { return p.ok && !p.creds.Expired() }
+func (p *AWSProvider) Credentials() awssdk.Credentials { return p.creds }
 
-func (p *Provider) ListInstances(ctx context.Context, account string) ([]core.Instance, error) {
+func (p *AWSProvider) ListInstances(ctx context.Context, account string) ([]core.Instance, error) {
 	return nil, core.ErrNotImplemented // Phase 3: EC2 DescribeInstances
 }
-func (p *Provider) Connect(ctx context.Context, req core.ConnectRequest) (core.Session, error) {
+func (p *AWSProvider) Connect(ctx context.Context, req core.ConnectRequest) (core.Session, error) {
 	return nil, core.ErrNotImplemented // Phase 4
 }
-func (p *Provider) Logout(ctx context.Context) error {
+func (p *AWSProvider) Logout(ctx context.Context) error {
 	p.creds, p.ok = awssdk.Credentials{}, false
 	return nil
 }
 
-func (p *Provider) GetAccount() (string, error) {
+func (p *AWSProvider) GetAccount() (string, error) {
 	parts := strings.Split(p.cfg.RoleArn, ":")
 	if len(parts) >= 5 {
 		return parts[4], nil

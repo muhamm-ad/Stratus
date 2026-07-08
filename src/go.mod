@@ -12,6 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.43.4
 	github.com/coreos/go-oidc/v3 v3.17.0
 	github.com/int128/oauth2cli v1.15.0
+	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/zalando/go-keyring v0.2.6
 	golang.org/x/oauth2 v0.36.0
 )
