@@ -60,6 +60,7 @@ func main() {
 	ok("found %d identity provider(s): %s", len(names), strings.Join(names, ", "))
 
 	// 2) Choose one.
+	// chosen, err := chooseIdP(names, *idpName, secs)
 	chosen, err := chooseIdP(names, *idpName, secs)
 	must(err)
 
