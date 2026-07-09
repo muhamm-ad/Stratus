@@ -75,7 +75,7 @@ func renderSettings(s Styles, w int, head, cliHead string, cliRows []string, m s
 	rows := []string{
 		row(s, m.cursor == 0, "providers", "aws · azure · gcp — status via inventory sync"),
 		row(s, m.cursor == 1, "auto-refresh", refresh),
-		row(s, m.cursor == 2, "theme", Themes[themeIdx].Name+" (charm · stratus · mono)"),
+		row(s, m.cursor == 2, "theme", Themes[themeIdx].Name+" (charm · stratus · mono · terminal)"),
 	}
 	body := head + "\n\n" + strings.Join(rows, "\n") + "\n\n" + cliHead + "\n" + strings.Join(cliRows, "\n")
 	return lipgloss.NewStyle().Width(w).Render(body)

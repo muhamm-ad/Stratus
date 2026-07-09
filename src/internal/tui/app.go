@@ -40,7 +40,7 @@ const (
 // sub-models. Only App implements the full tea.Model (its View returns tea.View);
 // sub-models return plain strings, as recommended for children in Bubble Tea v2.
 type App struct {
-	svc   *service.Service
+	svc  *service.Service
 	send func(tea.Msg) // program.Send, injected after NewProgram
 
 	width, height int
@@ -70,11 +70,13 @@ type App struct {
 	searchMode bool
 	searchBuf  string
 
+	loggedUserLabel string
+
 	lastG time.Time // for multi-key "gg"
 }
 
 func New(svc *service.Service) *App {
-	th := Themes[0]
+	th := Themes[3]
 	a := &App{
 		svc:      svc,
 		keys:     DefaultKeys(),
@@ -136,13 +138,20 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		a.identity = msg.identityProvider
 		a.screen = screenApp
-		userInfo, err := msg.identityProvider.UserInfo(context.Background())
+
+		userInfo, err := a.identity.UserInfo(context.Background())
 		if err != nil {
+			a.loggedUserLabel = a.styles.Dim.Render("unknown")
 			a.flash, a.flashKind = "error: "+err.Error(), "err"
-			return a, flashClearCmd()
+			// 	return a, flashClearCmd()
+		} else {
+			userName := userInfo["name"]
+			// userEmail := userInfo["email"]
+			identityProviderId := string(a.identity.ID())
+			// a.loggedUser = a.styles.Dim.Render(userName + " (" + userEmail + ") · " + identityProviderId)
+			a.loggedUserLabel = a.styles.Dim.Render(userName + " via " + identityProviderId)
+			a.flash, a.flashKind = "welcome, "+userName+" — signed in via "+identityProviderId, "ok"
 		}
-		preferredUsername := userInfo["preferred_username"]
-		a.flash, a.flashKind = "welcome, "+preferredUsername+" — signed in via "+string(msg.identityProvider.ID()), "ok"
 
 		cmds = append(cmds, flashClearCmd())
 		cmds = append(cmds, syncProviderCmds(a.svc, false)...)
@@ -178,7 +187,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, flashClearCmd()
 
 	case flashClearMsg:
-		a.flash = ""
+		a.flash = a.loggedUserLabel
 		return a, nil
 
 	case autoRefreshMsg:

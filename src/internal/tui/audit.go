@@ -28,7 +28,7 @@ func newAuditModel(svc *service.Service) auditModel {
 	return auditModel{svc: svc}
 }
 
-func (m auditModel) Update(msg tea.KeyPressMsg) (auditModel, tea.Cmd) {
+func (m *auditModel) Update(msg tea.KeyPressMsg) tea.Cmd {
 	m.audits = m.getAudits()
 	switch msg.String() {
 	case "j", "down":
@@ -40,10 +40,10 @@ func (m auditModel) Update(msg tea.KeyPressMsg) (auditModel, tea.Cmd) {
 			m.cursor--
 		}
 	}
-	return m, nil
+	return nil
 }
 
-func (m auditModel) View(s Styles, w, h int) string {
+func (m *auditModel) View(s Styles, w, h int) string {
 	head := s.SectionHead.Render("AUDIT LOG · coming soon")
 	if len(m.audits) == 0 {
 		return lipgloss.Place(w, h, lipgloss.Left, lipgloss.Top,

@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"context"
 	// "fmt"
 	"strings"
 
@@ -39,14 +38,24 @@ func (a *App) headerView() string {
 		a.tabLabel("4 settings", tabSettings),
 	}
 	tabBar := lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
-	userInfo, err := a.identity.UserInfo(context.Background())
-	var user string
-	if err != nil {
-		user = a.styles.Dim.Render("unknown")
-	} else {
-		user = a.styles.Dim.Render(userInfo["preferred_username"] + " · " + string(a.identity.ID()))
+
+	_right := ""
+	if a.flash != "" {
+		var flashStyle lipgloss.Style
+		switch a.flashKind {
+		case "ok":
+			flashStyle = a.styles.OK
+		case "warn":
+			flashStyle = a.styles.Warn
+		case "err":
+			flashStyle = a.styles.Err
+		default:
+			flashStyle = a.styles.Accent
+		}
+		_right = a.styles.FilterLine.Width(a.width).Render(flashStyle.Render(a.flash))
 	}
-	right := lipgloss.NewStyle().Width(max(0, a.width-lipgloss.Width(title)-lipgloss.Width(tabBar)-2)).Align(lipgloss.Right).Render(user)
+
+	right := lipgloss.NewStyle().Width(max(0, a.width-lipgloss.Width(title)-lipgloss.Width(tabBar)-5)).Align(lipgloss.Right).Render(_right)
 	return a.styles.Header.Width(a.width).Render(
 		lipgloss.JoinHorizontal(lipgloss.Center, title, "  ", tabBar, " ", right),
 	)
@@ -84,22 +93,6 @@ func (a *App) filterLineView() string {
 		line = strings.Join(chips, " · ")
 	}
 	hint := a.styles.Dim.Render(" · x clear")
-	if a.flash != "" {
-		var flashStyle lipgloss.Style
-		switch a.flashKind {
-		case "ok":
-			flashStyle = a.styles.OK
-		case "warn":
-			flashStyle = a.styles.Warn
-		case "err":
-			flashStyle = a.styles.Err
-		default:
-			flashStyle = a.styles.Accent
-		}
-		return a.styles.FilterLine.Width(a.width).Render(
-			line + hint + "  " + flashStyle.Render(a.flash),
-		)
-	}
 	return a.styles.FilterLine.Width(a.width).Render(line + hint)
 }
 

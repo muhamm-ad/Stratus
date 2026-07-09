@@ -31,11 +31,15 @@ type Styles struct {
 
 func NewStyles(th Theme) Styles {
 	base := lipgloss.NewStyle().Foreground(th.Text)
+	tabFG := th.Bg
+	if _, ok := th.Bg.(lipgloss.NoColor); ok {
+		tabFG = lipgloss.Black
+	}
 	return Styles{
 		th:          th,
 		App:         lipgloss.NewStyle().Background(th.Bg).Foreground(th.Text),
 		Header:      lipgloss.NewStyle().Background(th.Surface).Foreground(th.Text),
-		TabActive:   lipgloss.NewStyle().Background(th.Accent).Foreground(th.Bg).Bold(true).Padding(0, 1),
+		TabActive:   lipgloss.NewStyle().Background(th.Accent).Foreground(tabFG).Bold(true).Padding(0, 1),
 		TabInactive: lipgloss.NewStyle().Foreground(th.Dim).Padding(0, 1),
 		Title:       lipgloss.NewStyle().Foreground(th.Accent).Bold(true),
 		SectionHead: lipgloss.NewStyle().Foreground(th.Dim).Bold(true), // callers upper-case the text
@@ -60,6 +64,9 @@ func NewStyles(th Theme) Styles {
 
 // blend tints a background with a foreground color for marked rows / banners.
 func blend(fg, bg color.Color) color.Color {
+	if _, ok := bg.(lipgloss.NoColor); ok {
+		return lipgloss.BrightBlack
+	}
 	colors := lipgloss.Blend1D(2, fg, bg)
 	if len(colors) > 1 {
 		return colors[1]

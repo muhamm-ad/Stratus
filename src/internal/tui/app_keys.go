@@ -89,13 +89,9 @@ func (a *App) updateAppKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		a.inv = m
 		return a.handleIntent(intent, cmd)
 	case tabSessions:
-		m, cmd := a.sess.Update(msg)
-		a.sess = m
-		return a, cmd
+		return a, a.sess.Update(msg)
 	case tabAudit:
-		m, cmd := a.audit.Update(msg)
-		a.audit = m
-		return a, cmd
+		return a, a.audit.Update(msg)
 	case tabSettings:
 		sm, scmd := a.settings.Update(msg, a.themeIdx)
 		a.settings = sm

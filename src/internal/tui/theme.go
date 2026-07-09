@@ -6,11 +6,10 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// Theme is a fixed (non-adaptive) color palette. Stratus ships three themes
-// that the user cycles with the 't' key. Because these are fixed palettes and
-// not light/dark-adaptive, we do NOT need lipgloss AdaptiveColor / the compat
-// package: we declare concrete colors and let Bubble Tea v2 downsample them to
-// the terminal's color profile automatically.
+// Theme is a color palette. Stratus ships four themes that the user cycles
+// with the 't' key. Fixed palettes use hex colors; the "terminal" theme uses
+// lipgloss.NoColor and standard ANSI colors so the emulator's own theme shows
+// through.
 type Theme struct {
 	Name    string
 	Bg      color.Color
@@ -79,6 +78,20 @@ var Themes = []Theme{
 		Err:     lipgloss.Color("#ff5f56"),
 		Warn:    lipgloss.Color("#f3bf4f"),
 		Cyan:    lipgloss.Color("#7adfe0"),
+	},
+	{
+		Name:     "terminal",
+		Bg:       lipgloss.NoColor{},
+		Surface:  lipgloss.NoColor{},
+		Surface2: lipgloss.BrightBlack,
+		Border:   lipgloss.BrightBlack,
+		Text:     lipgloss.NoColor{},
+		Dim:      lipgloss.BrightBlack,
+		Accent:   lipgloss.BrightBlue,
+		OK:       lipgloss.Green,
+		Err:      lipgloss.Red,
+		Warn:     lipgloss.Yellow,
+		Cyan:     lipgloss.Cyan,
 	},
 }
 

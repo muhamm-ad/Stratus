@@ -40,7 +40,7 @@ func newSessionsModel(svc *service.Service) sessionsModel {
 	return sessionsModel{svc: svc}
 }
 
-func (m sessionsModel) Update(msg tea.KeyPressMsg) (sessionsModel, tea.Cmd) {
+func (m *sessionsModel) Update(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
 	case "j", "down":
 		if m.cursor < len(m.getSessions())-1 {
@@ -51,10 +51,10 @@ func (m sessionsModel) Update(msg tea.KeyPressMsg) (sessionsModel, tea.Cmd) {
 			m.cursor--
 		}
 	}
-	return m, nil
+	return nil
 }
 
-func (m sessionsModel) View(s Styles, w, h int) string {
+func (m *sessionsModel) View(s Styles, w, h int) string {
 	head := s.SectionHead.Render("ACTIVE SESSIONS · coming soon")
 	if len(m.getSessions()) == 0 {
 		return lipgloss.Place(w, h, lipgloss.Left, lipgloss.Top,

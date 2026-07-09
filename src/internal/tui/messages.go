@@ -94,7 +94,7 @@ func execSessionCmd(spec SessionSpec) tea.Cmd {
 }
 
 func flashClearCmd() tea.Cmd {
-	return tea.Tick(3200*time.Millisecond, func(time.Time) tea.Msg { return flashClearMsg{} })
+	return tea.Tick(3*time.Second, func(time.Time) tea.Msg { return flashClearMsg{} })
 }
 
 func autoRefreshCmd() tea.Cmd {
