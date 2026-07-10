@@ -64,19 +64,33 @@ go run cmd/tui/main.go
 
 #### Frontend submodule
 
-The React UI lives in a separate repository and is linked into this project as a Git submodule at `frontend/`.
+The React UI lives in a separate repository and is linked into this project as a Git submodule at `frontend/`. It tracks the **`master`** branch of [Stratus-FrontEnd](https://github.com/muhamm-ad/Stratus-FrontEnd).
 
-Add the submodule
+**Initialize after clone**
 
 ```bash
 # From the Stratus repo root
 git submodule update --init --recursive
 ```
 
-If your not yet cloned the repository, clone it with submodules
+**Clone with submodules**
 
 ```bash
 git clone --recurse-submodules https://github.com/muhamm-ad/stratus.git
+```
+
+**Update to the latest `master`**
+
+```bash
+git submodule update --remote frontend
+git add frontend
+git commit -m "chore(frontend): bump submodule"
+```
+
+Install frontend dependencies before running or building the desktop app:
+
+```bash
+cd frontend && npm install && cd ..
 ```
 
 #### Run in development mode (hot reload)
