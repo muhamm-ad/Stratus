@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="imgs/stratus-wordmark-314w.png" alt="Stratus wordmark" width="314" />
+<img src="assets/logos/stratus-wordmark-314w.png" alt="Stratus wordmark" width="314" />
 
 **A multi-cloud gateway to your virtual machines.** Authenticate once, see all your VMs across AWS, Azure and GCP according to your permissions, and connect in a single click.
 
@@ -8,6 +8,8 @@
 ![go](https://img.shields.io/badge/Go-1.25+-00ADD8)
 ![wails](https://img.shields.io/badge/Wails-v2-DF0000)
 ![license](https://img.shields.io/badge/license-MIT-green)
+[![Go Report Card](https://goreportcard.com/badge/github.com/muhamm-ad/stratus?style=flat-square)](https://goreportcard.com/report/github.com/muhamm-ad/stratus)
+[![Release](https://img.shields.io/github/release/muhamm-ad/stratus.svg?style=flat-square)](https://github.com/muhamm-ad/stratus/releases/latest)
 
 </div>
 
@@ -30,34 +32,70 @@ Stratus is a desktop application (Linux, macOS, Windows) shipped as a single bin
 
 ## Architecture
 
-Stratus separates a UI-independent core, connectors (one per provider, each implementing a common `ProviderConnector` interface), and two frontends: the Wails graphical interface and the CLI. VM discovery goes through the official cloud SDKs; connection is delegated to the providers' native CLIs. The full detail is in [`docs/requirements-specification.md`](docs/requirements-specification.md).
-
-## Tech stack
-
-| Layer | Choice |
-|---|---|
-| Backend language | Go 1.25+ |
-| Desktop framework | Wails v2 (native webview, single binary) |
-| Frontend | React + TypeScript (Vite) |
-| Styling | Tailwind v4 |
-| Cloud SDKs | aws-sdk-go-v2, azure-sdk-for-go, google-cloud-go |
+Stratus separates a UI-independent core, connectors (one per provider, each implementing a common `CloudProvider` interface), and two frontends: the Wails graphical interface and the CLI. VM discovery goes through the official cloud SDKs; connection is delegated to the providers' native CLIs. The full detail is in [`docs/requirements-specification.md`](docs/requirements-specification.md).
 
 ## Prerequisites
 
-Go 1.25+, Node.js 20+, Git, the Wails CLI, and the CLIs of the targeted providers (AWS CLI v2 plus `session-manager-plugin` for the MVP). The full procedure is in [`docs/getting-started.md`](docs/getting-started.md).
+Go 1.25+, Node.js 20+, Git, the Wails CLI. The full procedure is in [`docs/getting-started.md`](docs/getting-started.md).
 
 ## Quick start
 
+### Clone the repository
+
 ```bash
-# Clone
 git clone https://github.com/muhamm-ad/stratus.git
-cd stratus/src
+cd stratus
+```
 
-# Install dependencies
+### Install dependencies
+
+```bash
 go mod tidy
-cd frontend && npm install && cd ..
+```
 
-# Run in development mode (hot reload)
+### Using the TUI
+
+```bash
+# From the Stratus repo root
+go run cmd/tui/main.go
+```
+
+### Using the Application
+
+#### Frontend submodule
+
+The React UI lives in a separate repository and is linked into this project as a Git submodule at `frontend/`. It tracks the **`master`** branch of [Stratus-FrontEnd](https://github.com/muhamm-ad/Stratus-FrontEnd).
+
+**Initialize after clone**
+
+```bash
+# From the Stratus repo root
+git submodule update --init --recursive
+```
+
+**Clone with submodules**
+
+```bash
+git clone --recurse-submodules https://github.com/muhamm-ad/stratus.git
+```
+
+**Update to the latest `master`**
+
+```bash
+git submodule update --remote frontend
+git add frontend
+git commit -m "chore(frontend): bump submodule"
+```
+
+Install frontend dependencies before running or building the desktop app:
+
+```bash
+cd frontend && npm install && cd ..
+```
+
+#### Run in development mode (hot reload)
+
+```bash
 wails dev
 ```
 
@@ -65,26 +103,21 @@ To build the production binary: `wails build` (or `task build`).
 
 ## Repository structure
 
+```text
+├── cmd/           # command-line interface
+├── configs/       # configuration files
+├── internal/      # Go module
+├── scripts/       # scripts
+├── frontend/      # React + TypeScript interface (submodule)
+├── docs/          # documentation
+├── website/       # website (submodule in progress)
+└── README.md      # this file
 ```
-stratus/
-├── docs/          # documentation (requirements, guides, design)
-├── imgs/          # brand assets (wordmark, mark, app icons)
-├── src/           # Go module + Wails project
-│   ├── core/      # business logic (auth, inventory, session, audit)
-│   ├── connectors/# one package per provider (aws, azure, gcp)
-│   ├── cmd/       # command-line interface
-│   └── frontend/  # React + TypeScript interface
-└── ...            # configuration files at the root
-```
-
-## Roadmap
-
-- **Milestone 0** — Go + Wails foundation, `ProviderConnector` interface, loopback authentication server.
-- **Milestone 1** — AWS MVP: IAM Identity Center SSO, EC2 inventory, SSM connection.
-- **Milestone 2** — Azure connector (Entra ID, Bastion/SSH).
-- **Milestone 3** — GCP connector (OAuth, IAP).
-- **Milestone 4** — Hardening: signed multi-OS packaging, advanced filters, documentation.
 
 ## Contributing
 
-Branching model: `main` (stable), `dev` (integration), and one `feature/<provider>` branch per connector. We start with `feature/aws`. Every merge flows up through a Merge Request (`feature/...` into `dev`, then `dev` into `main`).
+We welcome contributions! Please read the [contribution guidelines](CONTRIBUTING.md) before submitting a pull request.
+
+## Contact
+
+If you have any questions or feedback, please open an issue.

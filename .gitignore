@@ -1,14 +1,14 @@
 
 # Go
 /bin/
-/src/build/bin/
+/build/bin/
 *.exe
 *.test
 *.out
 
 # Frontend / Node
-/src/frontend/node_modules/
-/src/frontend/dist/
+/frontend/node_modules/
+/frontend/dist/
 
 # Environnement et secrets
 .env
@@ -26,3 +26,4 @@ node_modules/
 # Other
 drafts/*
 myconfig.json
+*__debug_*

@@ -1,0 +1,13 @@
+# Day to day changes
+# After clone: git submodule update --init --recursive
+
+# # Pull latest frontend master into Stratus
+#             git submodule update --remote frontend
+#             git add frontend
+#             git commit -m "chore(frontend): bump submodule"
+
+
+[submodule "frontend"]
+	path = frontend
+	url = https://github.com/muhamm-ad/Stratus-FrontEnd
+	branch = master

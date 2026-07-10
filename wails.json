@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "stratus",
+  "outputfilename": "stratus",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "Abdullah Diack (Muhammad)",
+    "email": "134101309+muhamm-ad@users.noreply.github.com"
+  }
+}
