@@ -40,14 +40,14 @@ Go 1.25+, Node.js 20+, Git, the Wails CLI. The full procedure is in [`docs/getti
 
 ## Quick start
 
-Clone the repository
+### Clone the repository
 
 ```bash
 git clone https://github.com/muhamm-ad/stratus.git
 cd stratus
 ```
 
-Install dependencies
+### Install dependencies
 
 ```bash
 go mod tidy
@@ -60,9 +60,26 @@ go mod tidy
 go run cmd/tui/main.go
 ```
 
-### Using the CLI
+### Using the Application
 
-Run in development mode (hot reload)
+#### Frontend submodule
+
+The React UI lives in a separate repository and is linked into this project as a Git submodule at `frontend/`.
+
+Add the submodule
+
+```bash
+# From the Stratus repo root
+git submodule update --init --recursive
+```
+
+If your not yet cloned the repository, clone it with submodules
+
+```bash
+git clone --recurse-submodules https://github.com/muhamm-ad/stratus.git
+```
+
+#### Run in development mode (hot reload)
 
 ```bash
 wails dev
