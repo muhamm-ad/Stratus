@@ -17,15 +17,15 @@ type loginResultMsg struct {
 	err              error
 }
 type vmsLoadedMsg struct {
-	provider string
-	vms      []VM
+	provider  core.CloudProviderID
+	vms []core.VM
 }
 type vmsLoadErrMsg struct {
-	provider string
+	provider core.CloudProviderID
 	err      error
 }
 type providerSyncedMsg struct {
-	provider string
+	provider core.CloudProviderID
 	count    int
 }
 
@@ -35,7 +35,7 @@ type sessionClosedMsg struct {
 	err error
 }
 type flashClearMsg struct{}
-type tokenExpiredMsg struct{ provider string }
+type tokenExpiredMsg struct{ provider core.CloudProviderID }
 type autoRefreshMsg time.Time
 type ggResetMsg struct{}
 
@@ -58,28 +58,17 @@ func syncProviderCmds(svc *service.Service, delay bool) []tea.Cmd {
 	cmds := make([]tea.Cmd, len(cloudProviders))
 
 	for i, cp := range cloudProviders {
-		provider := string(cp)
+		provider := cp
 		d := time.Duration(0)
 		if delay {
 			d = time.Duration(i+1) * 500 * time.Millisecond
 		}
 		cmds[i] = tea.Tick(d, func(time.Time) tea.Msg {
-			// FIXME: Implement this
-			// vms, err := svc.ListVMs(context.Background(), provider)
-			vms_mock := []VM{
-				{
-					Name: "vm1",
-					ID: "vm1",
-					Provider: "aws",
-					Region: "us-east-1",
-					Type: "t2.micro",
-				},
+			vms, err := svc.ListVMs(context.Background(), provider)
+			if err != nil {
+				return vmsLoadErrMsg{provider: provider, err: err}
 			}
-			// if err != nil {
-			// 	return vmsLoadErrMsg{provider: provider, err: err}
-			// }
-			// return vmsLoadedMsg{provider: provider, vms: vms}
-			return vmsLoadedMsg{provider: provider, vms: vms_mock}
+			return vmsLoadedMsg{provider: provider, vms: vms}
 		})
 	}
 	return cmds

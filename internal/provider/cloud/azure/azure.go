@@ -61,7 +61,7 @@ func (p *AzureProvider) AcceptsIssuer(issuer string) bool {
 		strings.Contains(issuer, "sts.windows.net")
 }
 
-func (p *AzureProvider) ListInstances(ctx context.Context, account string) ([]core.Instance, error) {
+func (p *AzureProvider) ListVMs(ctx context.Context) ([]core.VM, error) {
 	return nil, core.ErrNotImplemented // Phase 3: ARM VM list
 }
 func (p *AzureProvider) Connect(ctx context.Context, req core.ConnectRequest) (core.Session, error) {
@@ -74,6 +74,10 @@ func (p *AzureProvider) Logout(ctx context.Context) error {
 	return nil
 }
 
-func (p *AzureProvider) GetAccount() (string, error) {
-	return p.cfg.SubscriptionID, nil
+func (p *AzureProvider) getAccount() (core.Account, error) {
+	return core.Account{
+		ID:    p.cfg.SubscriptionID,
+		Name:  p.cfg.SubscriptionID,
+		Roles: []string{p.cfg.ARMScope},
+	}, nil
 }

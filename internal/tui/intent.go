@@ -1,5 +1,7 @@
 package tui
 
+import "github.com/muhamm-ad/stratus/internal/core"
+
 type intentKind int
 
 const (
@@ -12,6 +14,6 @@ const (
 
 type appIntent struct {
 	kind    intentKind
-	targets []VM
+	targets []core.VM
 	provider string
 }

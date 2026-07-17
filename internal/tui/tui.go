@@ -161,15 +161,16 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case vmsLoadedMsg:
 		a.inv.mergeProvider(msg.provider, msg.vms)
-		a.logs.add("INFO", msg.provider+" synced ("+itoa(len(msg.vms))+" VMs)")
+		a.logs.add("INFO", string(msg.provider)+" synced ("+itoa(len(msg.vms))+" VMs)")
 		return a, nil
 
 	case vmsLoadErrMsg:
+		provider := string(msg.provider)
 		if errors.Is(msg.err, core.ErrNotAuthenticated) || errors.Is(msg.err, core.ErrExchange) {
-			a.banners = append(a.banners, "▲ "+msg.provider+": session expired, VMs not loaded — press R to reconnect")
-			a.logs.add("WARN", msg.provider+" token expired")
+			a.banners = append(a.banners, "▲ "+provider+": session expired, VMs not loaded — press R to reconnect")
+			a.logs.add("WARN", provider+" token expired")
 		} else {
-			a.logs.add("WARN", msg.provider+": "+msg.err.Error())
+			a.logs.add("WARN", provider+": "+msg.err.Error())
 		}
 		return a, nil
 
@@ -198,8 +199,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, tea.Batch(cmds...)
 
 	case tokenExpiredMsg:
-		a.banners = append(a.banners, "▲ "+msg.provider+": session expired, VMs not loaded — press R to reconnect")
-		a.logs.add("WARN", msg.provider+" token expired")
+		provider := string(msg.provider)
+		a.banners = append(a.banners, "▲ "+provider+": session expired, VMs not loaded — press R to reconnect")
+		a.logs.add("WARN", provider+" token expired")
 		return a, nil
 	}
 

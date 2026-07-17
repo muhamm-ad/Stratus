@@ -23,15 +23,12 @@ type CloudProvider interface {
 	// IsAuthenticated reports whether a non-expired session currently exists.
 	IsAuthenticated() bool
 
-	// ListInstances returns the connectable vms for one account.
-	ListInstances(ctx context.Context, accountID string) ([]Instance, error)
+	// ListVMs returns the connectable vms for one account.
+	ListVMs(ctx context.Context) ([]VM, error)
 
 	// Connect opens an interactive session to a single vms.
 	Connect(ctx context.Context, req ConnectRequest) (Session, error)
 
 	// Logout clears tokens and any cached credentials.
 	Logout(ctx context.Context) error
-
-	// GetAccount returns the account/subscription/project ID from the cloud provider's configuration.
-	GetAccount() (string, error)
 }

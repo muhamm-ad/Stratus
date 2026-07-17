@@ -137,23 +137,6 @@ func (s *Service) requireActive() (core.IdentityProvider, error) {
 // CloudProviders lists the registered cloud-provider IDs.
 func (s *Service) CloudProviders() []core.CloudProviderID { return s.registry.IDs() }
 
-// Accounts returns configured account/subscription/project IDs per provider.
-func (s *Service) Accounts() map[core.CloudProviderID]string {
-	out := make(map[core.CloudProviderID]string)
-	for _, id := range s.registry.IDs() {
-		c, ok := s.registry.Get(id)
-		if !ok {
-			continue
-		}
-		account, err := c.GetAccount()
-		if err != nil {
-			continue
-		}
-		out[id] = account
-	}
-	return out
-}
-
 // ProviderUsable reports whether a provider can be used with the currently
 // active identity. Azure, for instance, is unusable unless the active identity
 // is an Entra issuer. Before any identity is chosen it returns true.
@@ -189,13 +172,13 @@ func (s *Service) Connect(ctx context.Context, id core.CloudProviderID) error {
 	return c.Authenticate(ctx, idp)
 }
 
-// ListInstances returns connectable VMs for one account on a provider. (Phase 3.)
-func (s *Service) ListInstances(ctx context.Context, id core.CloudProviderID, account string) ([]core.Instance, error) {
+// ListVMs returns connectable VMs for one account on a provider. (Phase 3.)
+func (s *Service) ListVMs(ctx context.Context, id core.CloudProviderID) ([]core.VM, error) {
 	cp, ok := s.registry.Get(id)
 	if !ok {
-		return nil, fmt.Errorf("service: unknown provider %q", id)
+		return nil, fmt.Errorf("service: unknown account for provider %q", id)
 	}
-	return cp.ListInstances(ctx, account)
+	return cp.ListVMs(ctx)
 }
 
 // OpenSession opens an interactive session to one instance. (Phase 4.)
@@ -206,4 +189,3 @@ func (s *Service) OpenSession(ctx context.Context, id core.CloudProviderID, req 
 	}
 	return c.Connect(ctx, req)
 }
-

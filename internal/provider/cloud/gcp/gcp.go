@@ -55,7 +55,7 @@ func (p *GCPProvider) Authenticate(ctx context.Context, idp core.IdentityProvide
 func (p *GCPProvider) IsAuthenticated() bool { return p.ok }
 func (p *GCPProvider) AccessToken() string   { return p.token }
 
-func (p *GCPProvider) ListInstances(ctx context.Context, account string) ([]core.Instance, error) {
+func (p *GCPProvider) ListVMs(ctx context.Context) ([]core.VM, error) {
 	return nil, core.ErrNotImplemented // Phase 3: Compute aggregatedList
 }
 func (p *GCPProvider) Connect(ctx context.Context, req core.ConnectRequest) (core.Session, error) {
@@ -63,6 +63,10 @@ func (p *GCPProvider) Connect(ctx context.Context, req core.ConnectRequest) (cor
 }
 func (p *GCPProvider) Logout(ctx context.Context) error { p.token, p.ok = "", false; return nil }
 
-func (p *GCPProvider) GetAccount() (string, error) {
-	return p.cfg.WorkforcePoolUserProject, nil
+func (p *GCPProvider) getAccount() (core.Account, error) {
+	return core.Account{
+		ID:    p.cfg.WorkforcePoolUserProject,
+		Name:  p.cfg.WorkforcePoolUserProject,
+		Roles: []string{p.cfg.Scope},
+	}, nil
 }

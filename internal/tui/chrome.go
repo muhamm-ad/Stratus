@@ -70,21 +70,26 @@ func (a *App) tabLabel(label string, t tab) string {
 
 func (a *App) filterLineView() string {
 	var chips []string
+	provider := string(a.inv.fProvider)
+	state := string(a.inv.fState)
+	region := string(a.inv.fRegion)
+	query := a.inv.query
+	
 	if a.tab == tabInventory {
 		if a.searchMode {
 			chips = append(chips, "/"+a.searchBuf+"▌")
 		} else {
-			if a.inv.fProvider != "" {
-				chips = append(chips, "provider: "+a.inv.fProvider)
+			if provider != "" {
+				chips = append(chips, "provider: "+provider)
 			}
-			if a.inv.fState != "" && a.inv.fState != "all" {
-				chips = append(chips, "state: "+a.inv.fState)
+			if state != "" && state != "all" {
+				chips = append(chips, "state: "+state)
 			}
-			if a.inv.fRegion != "" {
-				chips = append(chips, "region: "+a.inv.fRegion)
+			if region != "" {
+				chips = append(chips, "region: "+region)
 			}
-			if a.inv.query != "" {
-				chips = append(chips, "/"+a.inv.query)
+			if query != "" {
+				chips = append(chips, "/"+query)
 			}
 		}
 	}

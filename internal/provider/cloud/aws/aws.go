@@ -67,7 +67,7 @@ func (p *AWSProvider) Authenticate(ctx context.Context, idp core.IdentityProvide
 func (p *AWSProvider) IsAuthenticated() bool           { return p.ok && !p.creds.Expired() }
 func (p *AWSProvider) Credentials() awssdk.Credentials { return p.creds }
 
-func (p *AWSProvider) ListInstances(ctx context.Context, account string) ([]core.Instance, error) {
+func (p *AWSProvider) ListVMs(ctx context.Context) ([]core.VM, error) {
 	return nil, core.ErrNotImplemented // Phase 3: EC2 DescribeInstances
 }
 func (p *AWSProvider) Connect(ctx context.Context, req core.ConnectRequest) (core.Session, error) {
@@ -78,10 +78,14 @@ func (p *AWSProvider) Logout(ctx context.Context) error {
 	return nil
 }
 
-func (p *AWSProvider) GetAccount() (string, error) {
+func (p *AWSProvider) getAccount() (core.Account, error) {
 	parts := strings.Split(p.cfg.RoleArn, ":")
 	if len(parts) >= 5 {
-		return parts[4], nil
+		return core.Account{
+			ID:    parts[4],
+			Name:  parts[4],
+			Roles: []string{p.cfg.RoleArn},
+		}, nil
 	}
-	return "", fmt.Errorf("aws: error getting account from role ARN")
+	return core.Account{}, fmt.Errorf("aws: error getting account from role ARN")
 }
