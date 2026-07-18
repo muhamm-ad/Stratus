@@ -4,6 +4,7 @@ import (
 	"image/color"
 
 	"charm.land/lipgloss/v2"
+	"github.com/muhamm-ad/stratus/internal/core"
 )
 
 // Theme is a color palette. Stratus ships four themes that the user cycles
@@ -96,8 +97,8 @@ var Themes = []Theme{
 }
 
 // ProviderColor maps a provider id to its brand color.
-func ProviderColor(p string) color.Color {
-	switch p {
+func ProviderColor(p core.CloudProviderID) color.Color {
+	switch string(p) {
 	case "aws":
 		return AWSColor
 	case "azure":

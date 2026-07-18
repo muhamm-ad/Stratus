@@ -3,11 +3,9 @@ package tui
 import (
 	"strconv"
 	"strings"
-
-	"charm.land/lipgloss/v2"
 )
 
-func cycle(current string, vals ...string) string {
+func cycle[T comparable](current T, vals ...T) T {
 	if len(vals) == 0 {
 		return current
 	}
@@ -30,10 +28,6 @@ func anyMarked(m map[string]bool) bool {
 
 func itoa(n int) string { return strconv.Itoa(n) }
 
-func providerDot(s Styles, provider string) string {
-	return lipgloss.NewStyle().Foreground(ProviderColor(provider)).Render("●")
-}
-
 func formatTags(tags map[string]string) string {
 	if len(tags) == 0 {
 		return "—"
@@ -43,19 +37,4 @@ func formatTags(tags map[string]string) string {
 		parts = append(parts, k+":"+v)
 	}
 	return strings.Join(parts, " · ")
-}
-
-func vmMethodLabel(vm VM) string {
-	if vm.Method != "" {
-		return vm.Method
-	}
-	switch vm.Provider {
-	case "aws":
-		return "SSM"
-	case "azure":
-		return "Bastion"
-	case "gcp":
-		return "IAP"
-	}
-	return "—"
 }

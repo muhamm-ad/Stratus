@@ -99,7 +99,7 @@ type VMData struct {
 	Region       string   `json:"region"`
 	State        string   `json:"state"`
 	Platform     string   `json:"platform"`
-	InstanceType string   `json:"size"` // "size" matches the UI column label
+	InstanceType string   `json:"type"` // "size" matches the UI column label
 	PrivateIP    string   `json:"privateIP"`
 	PublicIP     string   `json:"publicIP"`
 	OSUser       string   `json:"osUser"`
@@ -107,7 +107,7 @@ type VMData struct {
 	CanConnect   bool     `json:"canConnect"` // derived: state == "running"
 }
 
-func toVMData(inst core.Instance, provider string) VMData {
+func toVMData(inst core.VM, provider core.CloudProviderID) VMData {
 	tags := make([]string, 0, len(inst.Tags))
 	for k, v := range inst.Tags {
 		tags = append(tags, k+":"+v)
@@ -116,24 +116,22 @@ func toVMData(inst core.Instance, provider string) VMData {
 	return VMData{
 		ID:           inst.ID,
 		Name:         inst.Name,
-		Provider:     provider,
-		Region:       inst.Region,
-		State:        inst.State,
-		Platform:     inst.Platform,
-		InstanceType: inst.InstanceType,
-		PrivateIP:    inst.PrivateIP,
-		PublicIP:     inst.PublicIP,
-		OSUser:       inst.OSUser,
+		Provider:     string(provider),
+		Region:       string(inst.Region),
+		State:        string(inst.State),
+		Platform:     string(inst.Platform),
+		InstanceType: string(inst.Type),
+		PrivateIP:    string(inst.PrivateIP),
+		PublicIP:     string(inst.PublicIP),
+		OSUser:       string(inst.OSUser),
 		Tags:         tags,
 		CanConnect:   inst.IsRunning(),
 	}
 }
 
-// ListInstances returns connectable VMs for one cloud provider.
-// accountID may be empty — providers that support multiple accounts use it to
-// scope the query; single-account providers ignore it.
-func (a *App) ListInstances(cloudProviderID, accountID string) ([]VMData, error) {
-	instances, err := a.svc.ListInstances(a.ctx, core.CloudProviderID(cloudProviderID), accountID)
+// ListVMs returns connectable VMs for one cloud provider.
+func (a *App) ListVMs(cloudProviderID core.CloudProviderID) ([]VMData, error) {
+	instances, err := a.svc.ListVMs(a.ctx, cloudProviderID)
 	if err != nil {
 		return nil, err
 	}

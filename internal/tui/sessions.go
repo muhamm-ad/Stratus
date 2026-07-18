@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/muhamm-ad/stratus/internal/core"
 	"github.com/muhamm-ad/stratus/internal/service"
 )
 
@@ -77,11 +78,11 @@ func (m *sessionsModel) View(s Styles, w, h int) string {
 
 // BuildSessionSpec constructs the native CLI argv for connecting to a VM.
 // Provider-specific knowledge lives here so the TUI only runs tea.ExecProcess.
-func BuildSessionSpec(vm VM, sessionID string) SessionSpec { // FIXME: Implement this
+func BuildSessionSpec(vm core.VM, sessionID string) SessionSpec { // FIXME: Implement this
 	spec := SessionSpec{
 		SessionID: sessionID,
 		VMName:    vm.Name,
-		Provider:  vm.Provider,
+		Provider:  string(vm.Provider),
 	}
 	// switch vm.Provider {
 	// case "aws":

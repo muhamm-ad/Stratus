@@ -24,10 +24,6 @@ type vmsLoadErrMsg struct {
 	provider core.CloudProviderID
 	err      error
 }
-type providerSyncedMsg struct {
-	provider core.CloudProviderID
-	count    int
-}
 
 type sessionOpenedMsg struct{ spec SessionSpec }
 type sessionClosedMsg struct {
@@ -58,17 +54,16 @@ func syncProviderCmds(svc *service.Service, delay bool) []tea.Cmd {
 	cmds := make([]tea.Cmd, len(cloudProviders))
 
 	for i, cp := range cloudProviders {
-		provider := cp
 		d := time.Duration(0)
 		if delay {
-			d = time.Duration(i+1) * 500 * time.Millisecond
+			d = time.Duration(i+1) * 200 * time.Millisecond
 		}
 		cmds[i] = tea.Tick(d, func(time.Time) tea.Msg {
-			vms, err := svc.ListVMs(context.Background(), provider)
+			vms, err := svc.ListVMs(context.Background(), cp)
 			if err != nil {
-				return vmsLoadErrMsg{provider: provider, err: err}
+				return vmsLoadErrMsg{provider: cp, err: err}
 			}
-			return vmsLoadedMsg{provider: provider, vms: vms}
+			return vmsLoadedMsg{provider: cp, vms: vms}
 		})
 	}
 	return cmds

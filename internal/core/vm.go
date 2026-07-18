@@ -24,6 +24,12 @@ type VMRegion string
 type VMOsUser string
 type IPAddress string
 
+type VMActivity struct { // REVIEW: Check if this is needed
+	OK   bool
+	When time.Time
+	Text string
+}
+
 // VM is a connectable virtual machine, normalized across providers.
 type VM struct {
 	ID         string
@@ -38,6 +44,7 @@ type VM struct {
 	OSUser     VMOsUser // default OS login user, when known
 	LaunchTime time.Time
 	Tags       map[string]string
+	// Activity   VMActivity
 }
 
 // IsRunning reports whether the instance can currently accept connections.

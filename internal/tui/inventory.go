@@ -5,9 +5,10 @@ import (
 	"sort"
 	"strings"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/table"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/muhamm-ad/stratus/internal/core"
 	"github.com/muhamm-ad/stratus/internal/service"
 )
 
@@ -23,17 +24,17 @@ const (
 )
 
 type inventoryModel struct {
-	svc      *service.Service
-	all      []VM
-	view     []VM // after filters+sort
-	cursor   int
-	marked   map[string]bool
-	tbl      table.Model
+	svc        *service.Service
+	allVM      []core.VM
+	filteredVM []core.VM
+	cursor     int
+	marked     map[string]bool
+	tbl        table.Model
 	showDetail bool
 
-	fProvider string // "" | aws | azure | gcp
-	fState    string // "" | running | stopped | transition | unknown
-	fRegion   string
+	fProvider core.CloudProviderID
+	fState    core.VMState
+	fRegion   core.VMRegion
 	query     string
 	sortK     sortKey
 	sortAsc   bool
@@ -52,68 +53,73 @@ func newInventoryModel(svc *service.Service) inventoryModel {
 	return inventoryModel{svc: svc, marked: map[string]bool{}, tbl: t, sortAsc: true}
 }
 
-func (m *inventoryModel) mergeProvider(provider string, vms []VM) {
+func (m *inventoryModel) mergeProvider(provider core.CloudProviderID, vms []core.VM) {
 	// Drop existing VMs for that provider, append fresh ones.
-	kept := m.all[:0]
-	for _, v := range m.all {
+	kept := m.allVM[:0]
+	for _, v := range m.allVM {
 		if v.Provider != provider {
 			kept = append(kept, v)
 		}
 	}
-	m.all = append(kept, vms...)
+	m.allVM = append(kept, vms...)
 	m.recompute()
 }
 
 func (m *inventoryModel) recompute() {
-	m.view = m.view[:0]
-	for _, v := range m.all {
-		if m.fProvider != "" && v.Provider != m.fProvider { continue }
-		if !stateMatches(m.fState, v.State) { continue }
-		if m.fRegion != "" && v.Region != m.fRegion { continue }
-		if m.query != "" && !strings.Contains(strings.ToLower(v.Name), strings.ToLower(m.query)) { continue }
-		m.view = append(m.view, v)
+	m.filteredVM = m.filteredVM[:0]
+	for _, v := range m.allVM {
+		if m.fProvider != "" && v.Provider != m.fProvider {
+			continue
+		}
+		if m.fState != "" && v.State != m.fState {
+			continue
+		}
+		if m.fRegion != "" && v.Region != m.fRegion {
+			continue
+		}
+		// TODO: search query in a combined string of name, provider, region, type, state
+		if m.query != "" && !strings.Contains(strings.ToLower(v.Name), strings.ToLower(m.query)) {
+			continue
+		}
+		m.filteredVM = append(m.filteredVM, v)
 	}
 	m.applySort()
 	m.syncRows()
 }
 
 func (m *inventoryModel) applySort() {
-	if m.sortK == sortNone { return }
+	if m.sortK == sortNone {
+		return
+	}
 	less := func(i, j int) bool {
-		a, b := m.view[i], m.view[j]
+		a, b := m.filteredVM[i], m.filteredVM[j]
 		var r bool
 		switch m.sortK {
-		case sortName: r = a.Name < b.Name
-		case sortProvider: r = a.Provider < b.Provider
-		case sortRegion: r = a.Region < b.Region
-		case sortType: r = a.Type < b.Type
-		case sortState: r = a.State < b.State
+		case sortName:
+			r = a.Name < b.Name
+		case sortProvider:
+			r = a.Provider < b.Provider
+		case sortRegion:
+			r = a.Region < b.Region
+		case sortType:
+			r = a.Type < b.Type
+		case sortState:
+			r = a.State < b.State
 		}
-		if !m.sortAsc { return !r }
+		if !m.sortAsc {
+			return !r
+		}
 		return r
 	}
-	sort.SliceStable(m.view, less)
+	sort.SliceStable(m.filteredVM, less)
 }
 
-func stateMatches(filter string, s VMState) bool {
-	switch filter {
-	case "", "all": return true
-	case "running": return s == StateRunning
-	case "stopped": return s == StateStopped
-	case "transition": return s == StateStarting || s == StateStopping
-	case "unknown": return s == StateUnknown
+func (m *inventoryModel) syncRows() {
+	if m.cursor >= len(m.filteredVM) && len(m.filteredVM) > 0 {
+		m.cursor = len(m.filteredVM) - 1
 	}
-	return true
-}
-
-// stateGlyph renders the exact glyphs from the mockup with theme colors.
-func stateGlyph(s Styles, st VMState) string {
-	switch st {
-	case StateRunning: return s.OK.Render("● running")
-	case StateStopped: return s.Err.Render("○ stopped")
-	case StateStarting: return s.Warn.Render("◐ starting")
-	case StateStopping: return s.Warn.Render("◑ stopping")
-	default: return s.Dim.Render("◌ unknown")
+	if len(m.filteredVM) == 0 {
+		m.cursor = 0
 	}
 }
 
@@ -121,13 +127,20 @@ func stateGlyph(s Styles, st VMState) string {
 func (m inventoryModel) Update(msg tea.KeyPressMsg, s Styles) (inventoryModel, tea.Cmd, appIntent) {
 	switch msg.String() {
 	case "j", "down":
-		if m.cursor < len(m.view)-1 { m.cursor++ }
+		if m.cursor < len(m.filteredVM)-1 {
+			m.cursor++
+		}
 	case "k", "up":
-		if m.cursor > 0 { m.cursor-- }
+		if m.cursor > 0 {
+			m.cursor--
+		}
 	case "G":
-		m.cursor = len(m.view) - 1
+		m.cursor = len(m.filteredVM) - 1
 	case " ":
-		if len(m.view) > 0 { id := m.view[m.cursor].ID; m.marked[id] = !m.marked[id] }
+		if len(m.filteredVM) > 0 {
+			id := m.filteredVM[m.cursor].ID
+			m.marked[id] = !m.marked[id]
+		}
 	case "a":
 		m.toggleMarkAll()
 	case "enter":
@@ -136,12 +149,26 @@ func (m inventoryModel) Update(msg tea.KeyPressMsg, s Styles) (inventoryModel, t
 		return m, nil, appIntent{kind: intentConnect, targets: m.connectTargets()}
 	case "S":
 		return m, nil, appIntent{kind: intentStop, targets: m.connectTargets()}
-	case "p": m.fProvider = cycle(m.fProvider, "", "aws", "azure", "gcp"); m.recompute()
-	case "f": m.fState = cycle(m.fState, "all", "running", "stopped", "transition", "unknown"); m.recompute()
-	case "r": m.cycleRegion(); m.recompute()
-	case "x": m.clearFilters(); m.recompute()
-	case "o": m.sortK = (m.sortK + 1) % 6; m.recompute()
-	case "O": m.sortAsc = !m.sortAsc; m.recompute()
+	case "p":
+		providersIds := append(m.svc.CloudProviders(), core.CloudProviderID(""))
+		m.fProvider = cycle(m.fProvider, providersIds...)
+		m.recompute()
+	case "f":
+		states := []core.VMState{core.StateRunning, core.StateStopped, core.StateStarting, core.StateStopping, core.StateUnknown, ""}
+		m.fState = cycle(m.fState, states...)
+		m.recompute()
+	case "r":
+		m.cycleRegion()
+		m.recompute()
+	case "x":
+		m.clearFilters()
+		m.recompute()
+	case "o":
+		m.sortK = (m.sortK + 1) % 6
+		m.recompute()
+	case "O":
+		m.sortAsc = !m.sortAsc
+		m.recompute()
 	case "u":
 		return m, nil, appIntent{kind: intentRefresh}
 	}
@@ -149,30 +176,41 @@ func (m inventoryModel) Update(msg tea.KeyPressMsg, s Styles) (inventoryModel, t
 	return m, nil, appIntent{}
 }
 
+// stateGlyph renders the exact glyphs from the mockup with theme colors.
+func stateGlyph(s Styles, st core.VMState) string {
+	switch st {
+	case core.StateRunning:
+		return s.OK.Render("● running")
+	case core.StateStopped:
+		return s.Err.Render("○ stopped")
+	case core.StateStarting:
+		return s.Warn.Render("◐ starting")
+	case core.StateStopping:
+		return s.Warn.Render("◑ stopping")
+	default:
+		return s.Dim.Render("◌ unknown")
+	}
+}
+
 // connectTargets returns marked VMs (or the cursor VM), splitting out the ones
 // with no permission so App can flash "N opened · M skipped (no permission)".
-func (m inventoryModel) connectTargets() []VM {
-	var out []VM
+func (m inventoryModel) connectTargets() []core.VM {
+	var out []core.VM
 	if anyMarked(m.marked) {
-		for _, v := range m.view { if m.marked[v.ID] { out = append(out, v) } }
-	} else if len(m.view) > 0 {
-		out = append(out, m.view[m.cursor])
+		for _, v := range m.filteredVM {
+			if m.marked[v.ID] {
+				out = append(out, v)
+			}
+		}
+	} else if len(m.filteredVM) > 0 {
+		out = append(out, m.filteredVM[m.cursor])
 	}
 	return out
 }
 
-func (m *inventoryModel) syncRows() {
-	if m.cursor >= len(m.view) && len(m.view) > 0 {
-		m.cursor = len(m.view) - 1
-	}
-	if len(m.view) == 0 {
-		m.cursor = 0
-	}
-}
-
 func (m *inventoryModel) toggleMarkAll() {
 	if !anyMarked(m.marked) {
-		for _, v := range m.view {
+		for _, v := range m.filteredVM {
 			m.marked[v.ID] = true
 		}
 		return
@@ -205,16 +243,18 @@ func (m *inventoryModel) cycleRegion() {
 	m.fRegion = regions[0]
 }
 
-func (m *inventoryModel) distinctRegions() []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, v := range m.all {
-		if v.Region != "" && !seen[v.Region] {
+func (m *inventoryModel) distinctRegions() []core.VMRegion {
+	seen := map[core.VMRegion]bool{}
+	var out []core.VMRegion
+	for _, v := range m.allVM {
+		if v.Region != core.VMRegion("") && !seen[v.Region] {
 			seen[v.Region] = true
 			out = append(out, v.Region)
 		}
 	}
-	sort.Strings(out)
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i] < out[j]
+	})
 	return out
 }
 
@@ -226,9 +266,9 @@ func (m *inventoryModel) clearFilters() {
 }
 
 func (m inventoryModel) View(s Styles, w, h int) string {
-	if len(m.view) == 0 {
+	if len(m.filteredVM) == 0 {
 		msg := s.Dim.Render("no vms match filters — press u to refresh")
-		if len(m.all) == 0 {
+		if len(m.allVM) == 0 {
 			msg = s.Dim.Render("no vms loaded — sign in and press u or R to sync providers")
 		}
 		return lipgloss.Place(w, h, lipgloss.Left, lipgloss.Top, msg)
@@ -252,58 +292,55 @@ func (m inventoryModel) View(s Styles, w, h int) string {
 		start = m.cursor - visible + 1
 	}
 	end := start + visible
-	if end > len(m.view) {
-		end = len(m.view)
+	if end > len(m.filteredVM) {
+		end = len(m.filteredVM)
 	}
 
 	for i := start; i < end; i++ {
-		v := m.view[i]
+		v := m.filteredVM[i]
 		rows = append(rows, m.renderRow(s, v, i == m.cursor))
 	}
 
 	body := strings.Join(rows, "\n")
-	if m.showDetail && m.cursor < len(m.view) {
-		body += "\n\n" + m.detailView(s, m.view[m.cursor])
+	if m.showDetail && m.cursor < len(m.filteredVM) {
+		body += "\n\n" + m.detailView(s, m.filteredVM[m.cursor])
 	}
 	return lipgloss.NewStyle().Width(w).Height(h).Render(body)
 }
 
-func (m inventoryModel) renderRow(s Styles, v VM, selected bool) string {
+func (m inventoryModel) renderRow(s Styles, vm core.VM, selected bool) string {
 	mark := "  "
-	if m.marked[v.ID] {
+	if m.marked[vm.ID] {
 		mark = s.Warn.Render("* ")
 	}
 	cur := "  "
 	if selected {
 		cur = s.Accent.Render("▸ ")
 	}
-	dot := providerDot(s, v.Provider)
-	name := padRight(v.Name, 26)
-	prov := padRight(v.Provider, 9)
-	region := padRight(v.Region, 15)
-	typ := padRight(v.Type, 18)
-	state := stateGlyph(s, v.State)
+	dot := lipgloss.NewStyle().Foreground(ProviderColor(vm.Provider)).Render("●")
+	name := padRight(vm.Name, 26)
+	prov := padRight(string(vm.Provider), 9)
+	region := padRight(string(vm.Region), 15)
+	typ := padRight(string(vm.Type), 18)
+	state := stateGlyph(s, vm.State)
 	line := cur + mark + dot + " " + name + prov + region + typ + state
 	if selected {
 		return s.Cursor.Render(line)
 	}
-	if m.marked[v.ID] {
+	if m.marked[vm.ID] {
 		return s.Marked.Render(line)
 	}
 	return line
 }
 
-func (m inventoryModel) detailView(s Styles, v VM) string {
+func (m inventoryModel) detailView(s Styles, vm core.VM) string {
 	lines := []string{
 		s.SectionHead.Render("INSTANCE DETAIL"),
-		s.Text.Render("name:    ") + s.Accent.Render(v.Name),
-		s.Text.Render("id:      ") + s.Dim.Render(v.ID),
-		s.Text.Render("ip:      ") + s.Cyan.Render(v.PrivateIP),
-		s.Text.Render("method:  ") + s.Text.Render(vmMethodLabel(v)),
-		s.Text.Render("tags:    ") + s.Dim.Render(formatTags(v.Tags)),
-	}
-	if len(v.Recent) > 0 {
-		lines = append(lines, s.Text.Render("recent:  ") + s.Dim.Render(v.Recent[0].Text))
+		s.Text.Render("name:    ") + s.Accent.Render(vm.Name),
+		s.Text.Render("id:      ") + s.Dim.Render(vm.ID),
+		s.Text.Render("ip:      ") + s.Cyan.Render(string(vm.PrivateIP)),
+		s.Text.Render("method:  ") + s.Text.Render("unknown (not implemented yet)"),
+		s.Text.Render("tags:    ") + s.Dim.Render(formatTags(vm.Tags)),
 	}
 	return strings.Join(lines, "\n")
 }

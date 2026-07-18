@@ -165,12 +165,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case vmsLoadErrMsg:
-		provider := string(msg.provider)
+		provider_str := string(msg.provider)
 		if errors.Is(msg.err, core.ErrNotAuthenticated) || errors.Is(msg.err, core.ErrExchange) {
-			a.banners = append(a.banners, "▲ "+provider+": session expired, VMs not loaded — press R to reconnect")
-			a.logs.add("WARN", provider+" token expired")
+			a.banners = append(a.banners, "▲ "+provider_str+": session expired, VMs not loaded — press R to reconnect")
+			a.logs.add("WARN", provider_str+" token expired")
 		} else {
-			a.logs.add("WARN", provider+": "+msg.err.Error())
+			a.logs.add("WARN", provider_str+": "+msg.err.Error())
 		}
 		return a, nil
 
