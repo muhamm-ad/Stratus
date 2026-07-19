@@ -1,0 +1,235 @@
+// Command list_vms exercises the Stratus service layer end-to-end: OIDC login
+// via service.LoginWith, cloud Connect, then ListVMs — no TUI, no Wails.
+// It uses the same bootstrap as the app (cmd/shared.Init).
+//
+// Examples:
+//
+//	go run ./scripts/list_vms                 # pick an IdP, list all usable providers
+//	go run ./scripts/list_vms -idp entra      # preselect the "entra" identity
+//	go run ./scripts/list_vms -provider aws   # only list VMs from AWS
+package main
+
+import (
+	"bufio"
+	"context"
+	"flag"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/muhamm-ad/stratus/cmd/shared"
+	"github.com/muhamm-ad/stratus/internal/core"
+	"github.com/muhamm-ad/stratus/internal/service"
+)
+
+func main() {
+	idpName := flag.String("idp", "", "identity provider to use (skips the prompt); must exist in config.json")
+	providerName := flag.String("provider", "", "cloud provider to list (e.g. aws); empty = all usable")
+	timeout := flag.Duration("timeout", 3*time.Minute, "overall timeout")
+	flag.Parse()
+
+	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	defer cancel()
+
+	// 1) Same bootstrap as the TUI / desktop app.
+	step("bootstrapping service (shared.Init)")
+	svc, warnings, err := shared.Init()
+	must(err)
+	for _, w := range warnings {
+		warn("%v", w)
+	}
+
+	idpIDs := svc.IdentityProvidersIDs()
+	ok("found %d identity provider(s): %s", len(idpIDs), joinIdentityIDs(idpIDs))
+
+	// 2) Choose identity and sign in through the service.
+	chosen, err := selectIdentityProvider(svc, idpIDs, core.IdentityProviderID(*idpName))
+	must(err)
+	ok("using identity %q", chosen)
+
+	onCode := func(dc core.DeviceCode) {
+		fmt.Println()
+		fmt.Println("  ┌────────────────────────────────────────")
+		fmt.Printf("  │  open : %s\n", dc.VerificationURI)
+		fmt.Printf("  │  code : %s\n", dc.UserCode)
+		fmt.Println("  └────────────────────────────────────────")
+		fmt.Println()
+	}
+	if svc.IdentityUsesDeviceFlow(chosen) {
+		step("starting device flow — follow the instructions below")
+	} else {
+		step("opening your browser — complete the sign-in there…")
+	}
+	idp, err := svc.LoginWith(ctx, chosen, onCode)
+	must(err)
+	ok("login complete via service.LoginWith")
+
+	// 3) Auth check through the service (not core/auth directly).
+	step("checking authentication (service.IsAuthenticated)")
+	if !svc.IsAuthenticated() {
+		fail("service reports not authenticated after login")
+	}
+	ok("authenticated as identity %q", svc.ActiveIdentityProviderID())
+
+	if info, uerr := idp.UserInfo(ctx); uerr != nil {
+		warn("UserInfo: %v", uerr)
+	} else {
+		fmt.Println("\n── user ───────────────────────────────────")
+		for _, k := range []string{"name", "preferred_username", "email", "sub"} {
+			if v := info[k]; v != "" {
+				fmt.Printf("  %-20s %s\n", k, v)
+			}
+		}
+	}
+
+	// 4) Connect + ListVMs through the service.
+	cloudIDs := selectCloudProviders(svc, core.CloudProviderID(*providerName))
+	if len(cloudIDs) == 0 {
+		fail("no usable cloud providers (check config and identity compatibility)")
+	}
+
+	var total int
+	for _, cp := range cloudIDs {
+		fmt.Println()
+		step("connecting %s (service.Connect)", string(cp))
+		if err := svc.Connect(ctx, cp); err != nil {
+			warn("%s: connect failed: %v", string(cp), err)
+			continue
+		}
+		ok("%s connected", string(cp))
+
+		step("listing VMs (service.ListVMs)")
+		vms, lerr := svc.ListVMs(ctx, cp)
+		if lerr != nil {
+			warn("%s: list failed: %v", string(cp), lerr)
+			continue
+		}
+		ok("%s: %d VM(s)", string(cp), len(vms))
+		printVMs(vms)
+		total += len(vms)
+	}
+
+	fmt.Println()
+	ok("done ✓ — %d VM(s) across %d provider(s)", total, len(cloudIDs))
+}
+
+// selectIdentityProvider resolves the identity to use: the -idp flag if given, the only one
+// if a single provider is configured, otherwise an interactive prompt.
+func selectIdentityProvider(svc *service.Service, idpIDs []core.IdentityProviderID, preset core.IdentityProviderID) (core.IdentityProviderID, error) {
+	if preset != "" {
+		for _, id := range idpIDs {
+			if id == preset {
+				return id, nil
+			}
+		}
+		return "", fmt.Errorf("identity %q not found (have: %s)", preset, joinIdentityIDs(idpIDs))
+	}
+	if len(idpIDs) == 1 {
+		return idpIDs[0], nil
+	}
+
+	fmt.Println("\nSelect an identity provider:")
+	for i, id := range idpIDs {
+		hint := ""
+		if svc.IdentityUsesDeviceFlow(id) {
+			hint = "  — device flow"
+		}
+		fmt.Printf("  [%d] %s%s\n", i+1, id, hint)
+	}
+	fmt.Print("\nChoice [1]: ")
+
+	line, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return idpIDs[0], nil
+	}
+	if idx, err := strconv.Atoi(line); err == nil && idx >= 1 && idx <= len(idpIDs) {
+		return idpIDs[idx-1], nil
+	}
+	for _, id := range idpIDs {
+		if strings.EqualFold(string(id), line) {
+			return id, nil
+		}
+	}
+	return "", fmt.Errorf("invalid selection %q", line)
+}
+
+func joinIdentityIDs(ids []core.IdentityProviderID) string {
+	parts := make([]string, len(ids))
+	for i, id := range ids {
+		parts[i] = string(id)
+	}
+	return strings.Join(parts, ", ")
+}
+
+func selectCloudProviders(svc *service.Service, preset core.CloudProviderID) []core.CloudProviderID {
+	all := svc.CloudProviders()
+	if preset != "" {
+		want := preset
+		for _, id := range all {
+			if id == want {
+				if !svc.ProviderUsable(id) {
+					warn("provider %q is not usable with the active identity", id)
+					return nil
+				}
+				return []core.CloudProviderID{id}
+			}
+		}
+		fail("cloud provider %q not found (have: %v)", preset, all)
+	}
+
+	var usable []core.CloudProviderID
+	for _, id := range all {
+		if svc.ProviderUsable(id) {
+			usable = append(usable, id)
+		} else {
+			warn("skipping %s (incompatible with active identity)", id)
+		}
+	}
+	return usable
+}
+
+func printVMs(vms []core.VM) {
+	if len(vms) == 0 {
+		fmt.Println("  (none)")
+		return
+	}
+	fmt.Println("\n── vms ────────────────────────────────────")
+	fmt.Printf("  %-16s %-24s %-10s %-12s %-16s %s\n",
+		"ID", "NAME", "STATE", "TYPE", "REGION", "IP")
+	for _, vm := range vms {
+		ip := string(vm.PrivateIP)
+		if vm.PublicIP != "" {
+			ip = string(vm.PublicIP)
+		}
+		id := vm.ID
+		if len(id) > 16 {
+			id = id[:13] + "…"
+		}
+		name := vm.Name
+		if len(name) > 24 {
+			name = name[:21] + "…"
+		}
+		fmt.Printf("  %-16s %-24s %-10s %-12s %-16s %s\n",
+			id, name, vm.State, vm.Type, vm.Region, ip)
+	}
+}
+
+// ── tiny console helpers ────────────────────────────────────────────────────
+
+func step(f string, a ...any) { fmt.Printf("\n▸ "+f+"\n", a...) }
+func ok(f string, a ...any)   { fmt.Printf("  ✓ "+f+"\n", a...) }
+func warn(f string, a ...any) { fmt.Printf("  ⚠ "+f+"\n", a...) }
+
+func fail(f string, a ...any) {
+	fmt.Fprintf(os.Stderr, "  ✗ "+f+"\n", a...)
+	os.Exit(1)
+}
+
+func must(err error) {
+	if err != nil {
+		fail("%v", err)
+	}
+}

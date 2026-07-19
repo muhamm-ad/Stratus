@@ -15,6 +15,6 @@ func init() {
 		if err != nil {
 			return nil, err
 		}
-		return New(cfg), nil
+		return NewAWSProvider(cfg)
 	})
 }

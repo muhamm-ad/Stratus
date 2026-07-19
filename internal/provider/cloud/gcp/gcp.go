@@ -28,7 +28,7 @@ type GCPProvider struct {
 	ok    bool
 }
 
-func New(cfg Config) *GCPProvider { return &GCPProvider{cfg: cfg} }
+func NewGCPProvider(cfg Config) (*GCPProvider, error) { return &GCPProvider{cfg: cfg}, nil }
 
 func (p *GCPProvider) ID() core.CloudProviderID { return ProviderID }
 

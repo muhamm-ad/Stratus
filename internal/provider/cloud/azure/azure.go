@@ -23,11 +23,11 @@ type AzureProvider struct {
 
 const ProviderID core.CloudProviderID = "azure"
 
-func New(cfg Config) *AzureProvider {
+func NewAzureProvider(cfg Config) (*AzureProvider, error) {
 	if cfg.ARMScope == "" {
 		cfg.ARMScope = DefaultARMScope
 	}
-	return &AzureProvider{cfg: cfg}
+	return &AzureProvider{cfg: cfg}, nil
 }
 
 func (p *AzureProvider) ID() core.CloudProviderID { return ProviderID }
