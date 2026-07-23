@@ -80,7 +80,7 @@ func (a *App) updateAppKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return a, nil
 	case key == "R":
 		return a, tea.Batch(
-			syncProviderCmds(a.svc, false)...
+			syncProviderCmds(a.svc, false)...,
 		)
 	}
 
@@ -117,7 +117,7 @@ func (a *App) handleIntent(intent appIntent, cmd tea.Cmd) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, a.stopCmd(intent.targets)...)
 	case intentRefresh:
 		cmds = append(cmds,
-			syncProviderCmds(a.svc, false)...
+			syncProviderCmds(a.svc, false)...,
 		)
 	}
 	if len(cmds) == 0 {
@@ -247,7 +247,7 @@ func (a *App) runPaletteCommand(c command) tea.Cmd {
 		return cmd
 	case "refresh":
 		return tea.Batch(
-			syncProviderCmds(a.svc, false)...
+			syncProviderCmds(a.svc, false)...,
 		)
 	case "logs":
 		a.showLogs = !a.showLogs
@@ -260,7 +260,7 @@ func (a *App) runPaletteCommand(c command) tea.Cmd {
 		a.overlay = overlayConfirmQuit
 	case "reconnect":
 		return tea.Batch(
-			syncProviderCmds(a.svc, false)...
+			syncProviderCmds(a.svc, false)...,
 		)
 	case "region":
 		a.inv.cycleRegion()

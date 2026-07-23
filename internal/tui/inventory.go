@@ -150,7 +150,7 @@ func (m inventoryModel) Update(msg tea.KeyPressMsg, s Styles) (inventoryModel, t
 	case "S":
 		return m, nil, appIntent{kind: intentStop, targets: m.connectTargets()}
 	case "p":
-		providersIds := append(m.svc.CloudProviders(), core.CloudProviderID(""))
+		providersIds := append(m.svc.CloudProvidersIDs(), core.CloudProviderID(""))
 		m.fProvider = cycle(m.fProvider, providersIds...)
 		m.recompute()
 	case "f":
@@ -344,7 +344,6 @@ func (m inventoryModel) detailView(s Styles, vm core.VM) string {
 	}
 	return strings.Join(lines, "\n")
 }
-
 func padRight(s string, n int) string {
 	if len(s) >= n {
 		return s[:n]

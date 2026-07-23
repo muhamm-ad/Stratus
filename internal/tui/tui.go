@@ -153,6 +153,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.flash, a.flashKind = "welcome, "+userName+" — signed in via "+identityProviderId, "ok"
 		}
 
+		for cp, cerr := range msg.cpErrors {
+			provider := string(cp)
+			a.banners = append(a.banners, "▲ "+provider+": connect failed — "+cerr.Error())
+			a.logs.add("WARN", provider+" connect failed: "+cerr.Error())
+		}
+
 		cmds = append(cmds, flashClearCmd())
 		cmds = append(cmds, syncProviderCmds(a.svc, false)...)
 		cmds = append(cmds, autoRefreshCmd())

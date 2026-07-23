@@ -14,11 +14,12 @@ import (
 type deviceCodeMsg core.DeviceCode
 type loginResultMsg struct {
 	identityProvider core.IdentityProvider
+	cpErrors         map[core.CloudProviderID]error
 	err              error
 }
 type vmsLoadedMsg struct {
-	provider  core.CloudProviderID
-	vms []core.VM
+	provider core.CloudProviderID
+	vms      []core.VM
 }
 type vmsLoadErrMsg struct {
 	provider core.CloudProviderID
@@ -39,18 +40,20 @@ type ggResetMsg struct{}
 
 // loginCmd wraps the blocking OIDC login in a tea.Cmd. The device code is not
 // returned here; it's pushed asynchronously via program.Send inside onCode.
+// Cloud providers are auto-connected inside LoginWith; failures land in
+// loginResultMsg.cpErrors without failing the overall login.
 func loginCmd(svc *service.Service, idpID core.IdentityProviderID, send func(tea.Msg)) tea.Cmd {
 	return func() tea.Msg {
-		idp, err := svc.LoginWith(context.Background(), idpID, func(dc core.DeviceCode) {
+		idp, err, cpErrors := svc.LoginWith(context.Background(), idpID, func(dc core.DeviceCode) {
 			send(deviceCodeMsg(dc)) // inject the code into the program from the callback
 		})
-		return loginResultMsg{identityProvider: idp, err: err}
+		return loginResultMsg{identityProvider: idp, cpErrors: cpErrors, err: err}
 	}
 }
 
 // syncProviderCmds loads all providers' VMs after a staggered delay
 func syncProviderCmds(svc *service.Service, delay bool) []tea.Cmd {
-	cloudProviders := svc.CloudProviders()
+	cloudProviders := svc.CloudProvidersIDs()
 	cmds := make([]tea.Cmd, len(cloudProviders))
 
 	for i, cp := range cloudProviders {

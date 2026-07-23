@@ -48,10 +48,11 @@ func (a *App) IdentityProviders() []string {
 	return out
 }
 
-// LoginWith signs in using the chosen identity provider (browser once).
-// Blocking: Wails runs bound methods off the UI thread, so the frontend just awaits it.
+// LoginWith signs in using the chosen identity provider (browser once) and
+// silently authenticates every cloud provider. Blocking: Wails runs bound
+// methods off the UI thread, so the frontend just awaits it.
 func (a *App) LoginWith(identityProviderID string) error {
-	_, err := a.svc.LoginWith(a.ctx, core.IdentityProviderID(identityProviderID), a.onDeviceCode)
+	_, err, _ := a.svc.LoginWith(a.ctx, core.IdentityProviderID(identityProviderID), a.onDeviceCode)
 	return err
 }
 
@@ -62,7 +63,7 @@ func (a *App) ActiveIdentityProviderID() string {
 
 // Login is a convenience for the single-provider case.
 func (a *App) Login() error {
-	_, err := a.svc.Login(a.ctx, a.onDeviceCode)
+	_, err, _ := a.svc.Login(a.ctx, a.onDeviceCode)
 	return err
 }
 
@@ -71,7 +72,7 @@ func (a *App) Logout() error         { return a.svc.Logout(a.ctx) }
 
 // CloudProviders lists registered cloud-provider IDs (e.g. "aws","azure","gcp").
 func (a *App) CloudProviders() []string {
-	ids := a.svc.CloudProviders()
+	ids := a.svc.CloudProvidersIDs()
 	out := make([]string, len(ids))
 	for i, id := range ids {
 		out[i] = string(id)
@@ -86,9 +87,9 @@ func (a *App) ProviderUsable(cloudProviderID string) bool {
 }
 
 // Connect derives a cloud provider's credentials from the active identity.
-func (a *App) Connect(cloudProviderID string) error {
-	return a.svc.Connect(a.ctx, core.CloudProviderID(cloudProviderID))
-}
+// func (a *App) Connect(cloudProviderID string) error {
+// 	return a.svc.AuthenticateCloudProvider(a.ctx, core.CloudProviderID(cloudProviderID))
+// }
 
 // VMData is the JSON-serialisable VM shape sent to the React frontend.
 // Field tags match the TypeScript VMInstance interface in types/domain.ts.

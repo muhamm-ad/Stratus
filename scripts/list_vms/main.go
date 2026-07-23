@@ -1,12 +1,12 @@
 // Command list_vms exercises the Stratus service layer end-to-end: OIDC login
-// via service.LoginWith, cloud Connect, then ListVMs — no TUI, no Wails.
-// It uses the same bootstrap as the app (cmd/shared.Init).
+// via service.LoginWith (which silently authenticates every cloud provider),
+// then ListVMs — no TUI, no Wails. It uses the same bootstrap as the app
+// (cmd/shared.Init).
 //
 // Examples:
 //
-//	go run ./scripts/list_vms                 # pick an IdP, list all usable providers
-//	go run ./scripts/list_vms -idp entra      # preselect the "entra" identity
-//	go run ./scripts/list_vms -provider aws   # only list VMs from AWS
+//	go run ./scripts/list_vms            # pick an IdP, list VMs from all providers
+//	go run ./scripts/list_vms -idp entra # preselect the "entra" identity
 package main
 
 import (
@@ -26,7 +26,6 @@ import (
 
 func main() {
 	idpName := flag.String("idp", "", "identity provider to use (skips the prompt); must exist in config.json")
-	providerName := flag.String("provider", "", "cloud provider to list (e.g. aws); empty = all usable")
 	timeout := flag.Duration("timeout", 3*time.Minute, "overall timeout")
 	flag.Parse()
 
@@ -45,6 +44,7 @@ func main() {
 	ok("found %d identity provider(s): %s", len(idpIDs), joinIdentityIDs(idpIDs))
 
 	// 2) Choose identity and sign in through the service.
+	// LoginWith also auto-connects every registered cloud provider.
 	chosen, err := selectIdentityProvider(svc, idpIDs, core.IdentityProviderID(*idpName))
 	must(err)
 	ok("using identity %q", chosen)
@@ -62,7 +62,7 @@ func main() {
 	} else {
 		step("opening your browser — complete the sign-in there…")
 	}
-	idp, err := svc.LoginWith(ctx, chosen, onCode)
+	idp, err, cpErrors := svc.LoginWith(ctx, chosen, onCode)
 	must(err)
 	ok("login complete via service.LoginWith")
 
@@ -84,23 +84,27 @@ func main() {
 		}
 	}
 
-	// 4) Connect + ListVMs through the service.
-	cloudIDs := selectCloudProviders(svc, core.CloudProviderID(*providerName))
+	// 4) Report cloud connect results from LoginWith, then list VMs.
+	cloudIDs := svc.CloudProvidersIDs()
 	if len(cloudIDs) == 0 {
-		fail("no usable cloud providers (check config and identity compatibility)")
+		fail("no cloud providers registered")
 	}
 
-	var total int
+	step("cloud connect results (from LoginWith)")
+	var connected []core.CloudProviderID
 	for _, cp := range cloudIDs {
-		fmt.Println()
-		step("connecting %s (service.Connect)", string(cp))
-		if err := svc.Connect(ctx, cp); err != nil {
-			warn("%s: connect failed: %v", string(cp), err)
+		if cerr, failed := cpErrors[cp]; failed {
+			warn("%s: %v", string(cp), cerr)
 			continue
 		}
 		ok("%s connected", string(cp))
+		connected = append(connected, cp)
+	}
 
-		step("listing VMs (service.ListVMs)")
+	var total int
+	for _, cp := range connected {
+		fmt.Println()
+		step("listing VMs on %s (service.ListVMs)", string(cp))
 		vms, lerr := svc.ListVMs(ctx, cp)
 		if lerr != nil {
 			warn("%s: list failed: %v", string(cp), lerr)
@@ -112,7 +116,7 @@ func main() {
 	}
 
 	fmt.Println()
-	ok("done ✓ — %d VM(s) across %d provider(s)", total, len(cloudIDs))
+	ok("done ✓ — %d VM(s) across %d connected provider(s)", total, len(connected))
 }
 
 // selectIdentityProvider resolves the identity to use: the -idp flag if given, the only one
@@ -162,33 +166,6 @@ func joinIdentityIDs(ids []core.IdentityProviderID) string {
 		parts[i] = string(id)
 	}
 	return strings.Join(parts, ", ")
-}
-
-func selectCloudProviders(svc *service.Service, preset core.CloudProviderID) []core.CloudProviderID {
-	all := svc.CloudProviders()
-	if preset != "" {
-		want := preset
-		for _, id := range all {
-			if id == want {
-				if !svc.ProviderUsable(id) {
-					warn("provider %q is not usable with the active identity", id)
-					return nil
-				}
-				return []core.CloudProviderID{id}
-			}
-		}
-		fail("cloud provider %q not found (have: %v)", preset, all)
-	}
-
-	var usable []core.CloudProviderID
-	for _, id := range all {
-		if svc.ProviderUsable(id) {
-			usable = append(usable, id)
-		} else {
-			warn("skipping %s (incompatible with active identity)", id)
-		}
-	}
-	return usable
 }
 
 func printVMs(vms []core.VM) {

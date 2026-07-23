@@ -11,21 +11,21 @@ import (
 type Styles struct {
 	th Theme
 
-	App          lipgloss.Style
-	Header       lipgloss.Style
-	TabActive    lipgloss.Style
-	TabInactive  lipgloss.Style
-	Title        lipgloss.Style
-	SectionHead  lipgloss.Style // UPPERCASE dim headers
-	StatusBar    lipgloss.Style
-	FilterLine   lipgloss.Style
-	Box          lipgloss.Style // rounded border, surface bg (login/overlays)
-	Cursor       lipgloss.Style // ▸ cursor row bg (surface2)
-	Marked       lipgloss.Style // warn-tinted marked row
-	ErrorBanner  lipgloss.Style
-	OverlayBox   lipgloss.Style
-	ModalBox     lipgloss.Style
-	CodeBox      lipgloss.Style // big device code box
+	App                                    lipgloss.Style
+	Header                                 lipgloss.Style
+	TabActive                              lipgloss.Style
+	TabInactive                            lipgloss.Style
+	Title                                  lipgloss.Style
+	SectionHead                            lipgloss.Style // UPPERCASE dim headers
+	StatusBar                              lipgloss.Style
+	FilterLine                             lipgloss.Style
+	Box                                    lipgloss.Style // rounded border, surface bg (login/overlays)
+	Cursor                                 lipgloss.Style // ▸ cursor row bg (surface2)
+	Marked                                 lipgloss.Style // warn-tinted marked row
+	ErrorBanner                            lipgloss.Style
+	OverlayBox                             lipgloss.Style
+	ModalBox                               lipgloss.Style
+	CodeBox                                lipgloss.Style // big device code box
 	Dim, Accent, OK, Err, Warn, Cyan, Text lipgloss.Style
 }
 

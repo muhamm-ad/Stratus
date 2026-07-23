@@ -13,7 +13,7 @@ const (
 )
 
 type appIntent struct {
-	kind    intentKind
-	targets []core.VM
+	kind     intentKind
+	targets  []core.VM
 	provider string
 }

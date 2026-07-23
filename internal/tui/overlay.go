@@ -23,8 +23,12 @@ func (a *App) composeOverlay(background string) string {
 	fgW, fgH := lipgloss.Size(fg)
 	x := (a.width - fgW) / 2
 	y := (a.height - fgH) / 2
-	if x < 0 { x = 0 }
-	if y < 0 { y = 0 }
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
 
 	comp := lipgloss.NewCompositor(
 		lipgloss.NewLayer(background),        // z 0

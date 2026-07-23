@@ -74,7 +74,7 @@ func (a *App) filterLineView() string {
 	state := string(a.inv.fState)
 	region := string(a.inv.fRegion)
 	query := a.inv.query
-	
+
 	if a.tab == tabInventory {
 		if a.searchMode {
 			chips = append(chips, "/"+a.searchBuf+"▌")

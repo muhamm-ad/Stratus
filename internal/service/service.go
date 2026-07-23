@@ -76,66 +76,71 @@ func (s *Service) IdentityUsesDeviceFlow(id core.IdentityProviderID) bool {
 	return false
 }
 
-// LoginWith signs in using an identity provider (browser once) and makes
-// it active. onCode is called only if the device flow is used (may be nil).
-func (s *Service) LoginWith(ctx context.Context, id core.IdentityProviderID, onCode func(core.DeviceCode)) (core.IdentityProvider, error) {
+// LoginWith signs in using an identity provider (browser once), makes it
+// active, then silently authenticates every registered cloud provider.
+// onCode is called only if the device flow is used (may be nil).
+// A non-nil error means identity login failed. Per-cloud failures are
+// returned in the map without failing the overall login.
+func (s *Service) LoginWith(ctx context.Context, id core.IdentityProviderID, onCode func(core.DeviceCode)) (core.IdentityProvider, error, map[core.CloudProviderID]error) {
 	idp, ok := s.idps[id]
 	if !ok {
-		return nil, fmt.Errorf("service: unknown identity provider %q", id)
+		return nil, fmt.Errorf("service: unknown identity provider %q", id), nil
 	}
+	s.activeIdentityID = ""
 	if err := idp.Login(ctx, onCode); err != nil {
-		return nil, err
+		return nil, err, nil
 	}
 	s.activeIdentityID = id
-	return idp, nil
+
+	cpErrors := make(map[core.CloudProviderID]error)
+	for _, cpID := range s.CloudProvidersIDs() {
+		if err := s.authenticateCloudProvider(ctx, cpID); err != nil {
+			cpErrors[cpID] = err
+		}
+	}
+	return idp, nil, cpErrors
 }
 
 // Login is a convenience for the common single-provider case. With several
 // providers configured it returns an error asking the caller to use LoginWith.
-func (s *Service) Login(ctx context.Context, onCode func(core.DeviceCode)) (core.IdentityProvider, error) {
+func (s *Service) Login(ctx context.Context, onCode func(core.DeviceCode)) (core.IdentityProvider, error, map[core.CloudProviderID]error) {
 	switch len(s.idps) {
 	case 0:
-		return nil, errors.New("service: no identity provider configured")
+		return nil, errors.New("service: no identity provider configured"), nil
 	case 1:
 		return s.LoginWith(ctx, s.IdentityProvidersIDs()[0], onCode)
 	default:
-		return nil, fmt.Errorf("service: multiple identity providers (%v) — use LoginWith", s.IdentityProviders())
+		return nil, fmt.Errorf("service: multiple identity providers (%v) — use LoginWith", s.IdentityProviders()), nil
 	}
 }
 
 func (s *Service) IsAuthenticated() bool {
-	idp, ok := s.activeIdentityProvider()
-	return ok && idp.IsAuthenticated()
+	idp, err := s.activeIdentityProvider()
+	if err != nil {
+		return false
+	}
+	return idp.IsAuthenticated()
 }
 
 func (s *Service) Logout(ctx context.Context) error {
-	idp, ok := s.activeIdentityProvider()
-	if !ok {
+	idp, err := s.activeIdentityProvider()
+	if err != nil {
 		return nil
 	}
-	err := idp.Logout(ctx)
+	err = idp.Logout(ctx)
 	s.activeIdentityID = ""
 	return err
 }
 
-func (s *Service) activeIdentityProvider() (core.IdentityProvider, bool) {
+func (s *Service) activeIdentityProvider() (core.IdentityProvider, error) {
 	if s.activeIdentityID == "" {
-		return nil, false
-	}
-	idp, ok := s.idps[s.activeIdentityID]
-	return idp, ok
-}
-
-func (s *Service) requireActive() (core.IdentityProvider, error) {
-	idp, ok := s.activeIdentityProvider()
-	if !ok {
 		return nil, core.ErrNotAuthenticated
 	}
-	return idp, nil
+	return s.idps[s.activeIdentityID], nil
 }
 
-// CloudProviders lists the registered cloud-provider IDs.
-func (s *Service) CloudProviders() []core.CloudProviderID { return s.registry.IDs() }
+// CloudProvidersIDs lists the registered cloud-provider IDs.
+func (s *Service) CloudProvidersIDs() []core.CloudProviderID { return s.registry.IDs() }
 
 // ProviderUsable reports whether a provider can be used with the currently
 // active identity. Azure, for instance, is unusable unless the active identity
@@ -149,27 +154,30 @@ func (s *Service) ProviderUsable(id core.CloudProviderID) bool {
 	if !ok {
 		return true
 	}
-	idp, ok := s.activeIdentityProvider()
-	if !ok {
+	idp, err := s.activeIdentityProvider()
+	if err != nil {
 		return true
 	}
 	return con.AcceptsIdentityIssuer(core.IssuerOf(idp))
 }
 
-// Connect derives a provider's credentials from the ACTIVE identity (silent).
-func (s *Service) Connect(ctx context.Context, id core.CloudProviderID) error {
-	idp, err := s.requireActive()
+// AuthenticateCloudProvider derives a provider's credentials from the ACTIVE identity (silent).
+func (s *Service) authenticateCloudProvider(ctx context.Context, id core.CloudProviderID) error {
+	idp, err := s.activeIdentityProvider()
 	if err != nil {
 		return err
 	}
-	c, ok := s.registry.Get(id)
+	cp, ok := s.registry.Get(id)
 	if !ok {
 		return fmt.Errorf("service: unknown provider %q", id)
 	}
-	if con, ok := c.(core.CloudProviderConstraint); ok && !con.AcceptsIdentityIssuer(core.IssuerOf(idp)) {
+	if con, ok := cp.(core.CloudProviderConstraint); ok && !con.AcceptsIdentityIssuer(core.IssuerOf(idp)) {
 		return fmt.Errorf("service: %q requires a Microsoft Entra identity (active identity %q cannot obtain its credentials)", id, s.activeIdentityID)
 	}
-	return c.Authenticate(ctx, idp)
+	if cp.IsAuthenticated() {
+		return nil
+	}
+	return cp.Authenticate(ctx, idp)
 }
 
 // ListVMs returns connectable VMs for one account on a provider. (Phase 3.)

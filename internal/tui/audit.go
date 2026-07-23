@@ -67,7 +67,6 @@ func (m *auditModel) View(s Styles, w, h int) string {
 		head+"\n\n"+lipgloss.JoinVertical(lipgloss.Left, rows...))
 }
 
-
 func (m *auditModel) getAudits() []AuditEntry {
 	m.mu.Lock()
 	defer m.mu.Unlock()
