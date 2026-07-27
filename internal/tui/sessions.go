@@ -3,18 +3,23 @@ package tui
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/muhamm-ad/stratus/internal/core"
 	"github.com/muhamm-ad/stratus/internal/service"
 )
 
 type session struct {
-	ID, Target, Provider, Method string
-	Opened                       time.Time
+	ID       string
+	Target   string
+	Provider string
+	Method   string
+	Opened   time.Time
 }
 
 // SessionSpec is what the TUI turns into an *exec.Cmd. The service decides the
@@ -28,52 +33,89 @@ type SessionSpec struct {
 	Args      []string // full argv
 }
 
+type sessionItem session
+
+func (i sessionItem) FilterValue() string { return i.Target + " " + i.Provider + " " + i.Method }
+
+func sessionItems(sessions []session) []list.Item {
+	items := make([]list.Item, len(sessions))
+	for i, s := range sessions {
+		items[i] = sessionItem(s)
+	}
+	return items
+}
+
 type sessionsModel struct {
-	svc      *service.Service
+	svc    *service.Service
+	styles Styles
+	list   list.Model
+	seq    int
+
+	mu       sync.Mutex
 	sessions []session
-	cursor   int
-	seq      int
-
-	mu sync.Mutex
 }
 
-func newSessionsModel(svc *service.Service) sessionsModel {
-	return sessionsModel{svc: svc}
+func newSessionsModel(svc *service.Service, s Styles) sessionsModel {
+	return sessionsModel{svc: svc, list: list.New(nil, nil, 0, 0), styles: s}
 }
 
-func (m *sessionsModel) Update(msg tea.KeyPressMsg) tea.Cmd {
-	switch msg.String() {
-	case "j", "down":
-		if m.cursor < len(m.getSessions())-1 {
-			m.cursor++
-		}
-	case "k", "up":
-		if m.cursor > 0 {
-			m.cursor--
-		}
+func (m *sessionsModel) Render(w io.Writer, l list.Model, index int, item list.Item) {
+	sess, ok := item.(sessionItem)
+	if !ok {
+		return
 	}
-	return nil
+	cur := "  "
+	if index == l.Index() {
+		cur = m.styles.Accent.Render("▸ ")
+	}
+	fmt.Fprintf(w, "%s%s · %s · %s · opened %s",
+		cur, sess.Target, sess.Provider, sess.Method, sess.Opened.Format(time.Kitchen))
 }
 
-func (m *sessionsModel) View(s Styles, w, h int) string {
-	head := s.SectionHead.Render("ACTIVE SESSIONS · coming soon")
-	if len(m.getSessions()) == 0 {
-		return lipgloss.Place(w, h, lipgloss.Left, lipgloss.Top,
-			head+"\n\n"+s.Dim.Render("no active sessions — connect from inventory (c)"))
-	}
-	var rows []string
-	for i, sess := range m.getSessions() {
-		cur := "  "
-		if i == m.cursor {
-			cur = s.Accent.Render("▸ ")
+// Update handles CloseSess itself, before ever forwarding to list.Update:
+// list.Model's default NextPage binding includes "d", which would otherwise
+// collide with CloseSess ("x"/"d").
+func (m *sessionsModel) Update(msg tea.KeyPressMsg, k KeyMap) tea.Cmd {
+	if key.Matches(msg, k.CloseSess) {
+		if item, ok := m.list.SelectedItem().(sessionItem); ok {
+			_ = m.CloseSession(context.Background(), item.ID)
 		}
-		line := fmt.Sprintf("%s%s · %s · %s · opened %s",
-			cur, sess.Target, sess.Provider, sess.Method,
-			sess.Opened.Format(time.Kitchen))
-		rows = append(rows, line)
+		m.syncItems()
+		return nil
 	}
-	return lipgloss.Place(w, h, lipgloss.Left, lipgloss.Top,
-		head+"\n\n"+lipgloss.JoinVertical(lipgloss.Left, rows...))
+	m.syncItems()
+	var cmd tea.Cmd
+	m.list, cmd = m.list.Update(msg)
+	return cmd
+}
+
+// syncItems only calls SetItems when the underlying data actually changed —
+// calling it unconditionally on every keystroke would be wasteful and, once
+// filtering is ever enabled here, would clobber in-progress filter state.
+func (m *sessionsModel) syncItems() {
+	if fresh := m.getSessions(); len(fresh) != len(m.sessions) {
+		m.sessions = fresh
+		m.list.SetItems(sessionItems(m.sessions))
+	}
+}
+
+func (m *sessionsModel) applyStyles(s Styles) {
+	m.styles = s
+	// m.list.SetDelegate(*m)
+}
+
+// SetSize reserves 2 lines for the hand-rolled header (+ blank line) which
+// sits outside list.Model's own layout accounting.
+func (m *sessionsModel) SetSize(w, h int) {
+	m.list.SetSize(w, max(1, h-2))
+}
+
+func (m *sessionsModel) View() string {
+	head := m.styles.SectionHead.Render("ACTIVE SESSIONS · coming soon")
+	if len(m.list.Items()) == 0 {
+		return head + "\n\n" + m.styles.Dim.Render("no active sessions — connect from inventory (c)")
+	}
+	return head + "\n\n" + m.list.View()
 }
 
 // BuildSessionSpec constructs the native CLI argv for connecting to a VM.

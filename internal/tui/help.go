@@ -1,28 +1,30 @@
 package tui
 
-import "charm.land/lipgloss/v2"
+import "charm.land/bubbles/v2/help"
 
-type helpModel struct{}
+type helpModel struct {
+	hm help.Model
+}
 
-func newHelpModel() helpModel { return helpModel{} }
+func newHelpModel() helpModel {
+	h := help.New()
+	h.ShowAll = true // this overlay is the full panel, not the one-line short bar
+	h.SetWidth(58)   // OverlayBox.Width(64) minus its Padding(1,2) horizontal budget
+	return helpModel{hm: h}
+}
 
-func (helpModel) View(s Styles) string {
-	sections := []struct{ title, body string }{
-		{"NAVIGATION", "1 inventory · 2 sessions · 3 audit · 4 settings · q quit"},
-		{"INVENTORY", HintInventory},
-		{"SESSIONS", HintSessions},
-		{"AUDIT", HintAudit},
-		{"SETTINGS", HintSettings},
-		{"GLOBAL", "/ filter · : command palette · L logs · t theme · ? help"},
-	}
-	var rows []string
-	rows = append(rows, s.Accent.Bold(true).Render("keyboard shortcuts"))
-	rows = append(rows, "")
-	for _, sec := range sections {
-		rows = append(rows, s.SectionHead.Render(sec.title))
-		rows = append(rows, s.Dim.Render(sec.body))
-		rows = append(rows, "")
-	}
-	rows = append(rows, s.Dim.Render("esc close"))
-	return s.OverlayBox.Width(64).Render(lipgloss.JoinVertical(lipgloss.Left, rows...))
+func (m helpModel) View(s Styles, k KeyMap) string {
+	// help.Model.View(k) takes the keymap fresh each call rather than baking
+	// styles in via a setter, so re-deriving colors from the current theme
+	// here (unlike table/list's SetStyles) is the idiomatic, stateless way.
+	m.hm.Styles.FullKey = s.Accent
+	m.hm.Styles.FullDesc = s.Dim
+	m.hm.Styles.FullSeparator = s.Dim
+	m.hm.Styles.Ellipsis = s.Dim
+
+	body := m.hm.View(k)
+	footer := s.Dim.Render("esc close")
+	return s.OverlayBox.Width(64).Render(
+		s.Accent.Bold(true).Render("keyboard shortcuts") + "\n\n" + body + "\n\n" + footer,
+	)
 }

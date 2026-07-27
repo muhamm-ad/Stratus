@@ -1,10 +1,10 @@
 package tui
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 
+	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/table"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -24,13 +24,14 @@ const (
 )
 
 type inventoryModel struct {
-	svc        *service.Service
-	allVM      []core.VM
-	filteredVM []core.VM
-	cursor     int
-	marked     map[string]bool
-	tbl        table.Model
-	showDetail bool
+	svc           *service.Service
+	styles        Styles
+	allVM         []core.VM
+	filteredVM    []core.VM
+	marked        map[string]bool
+	tbl           table.Model
+	showDetail    bool
+	width, height int
 
 	fProvider core.CloudProviderID
 	fState    core.VMState
@@ -40,17 +41,55 @@ type inventoryModel struct {
 	sortAsc   bool
 }
 
-func newInventoryModel(svc *service.Service) inventoryModel {
-	t := table.New(table.WithColumns([]table.Column{
-		{Title: "", Width: 2},
-		{Title: "", Width: 2},
-		{Title: "NAME", Width: 26},
-		{Title: "PROVIDER", Width: 9},
-		{Title: "REGION", Width: 15},
-		{Title: "TYPE", Width: 18},
-		{Title: "STATE", Width: 12},
-	}))
-	return inventoryModel{svc: svc, marked: map[string]bool{}, tbl: t, sortAsc: true}
+func newInventoryModel(svc *service.Service, s Styles) inventoryModel {
+	t := table.New(
+		table.WithColumns([]table.Column{
+			{Title: "", Width: 2},
+			{Title: "NAME", Width: 28},
+			{Title: "PROVIDER", Width: 9},
+			{Title: "REGION", Width: 15},
+			{Title: "TYPE", Width: 18},
+			{Title: "STATE", Width: 12},
+		}),
+		table.WithKeyMap(inventoryTableKeyMap()),
+		table.WithFocused(true),
+		table.WithStyles(tableStylesFor(s)),
+	)
+	return inventoryModel{svc: svc, styles: s, marked: map[string]bool{}, tbl: t, sortAsc: true}
+}
+
+// inventoryTableKeyMap mirrors the app's own navigation keys (k/j/g/G) but
+// strips PageUp/PageDown/HalfPageUp's default "b"/"f"/"space"/"u" bindings —
+// those letters are already claimed by FilterState, Mark, and Refresh.
+func inventoryTableKeyMap() table.KeyMap {
+	return table.KeyMap{
+		LineUp:       key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k/↑", "up")),
+		LineDown:     key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j/↓", "down")),
+		PageUp:       key.NewBinding(key.WithKeys("pgup"), key.WithHelp("pgup", "page up")),
+		PageDown:     key.NewBinding(key.WithKeys("pgdown"), key.WithHelp("pgdn", "page down")),
+		HalfPageUp:   key.NewBinding(key.WithKeys("ctrl+u"), key.WithHelp("ctrl+u", "½ page up")),
+		HalfPageDown: key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "½ page down")),
+		// "g" never actually reaches the table: app_keys.go intercepts it for the
+		// "gg" double-tap gesture before dispatch reaches here. Bound for symmetry only.
+		GotoTop:    key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "top")),
+		GotoBottom: key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "bottom")),
+	}
+}
+
+func tableStylesFor(s Styles) table.Styles {
+	return table.Styles{
+		Header:   s.SectionHead.Bold(true).Padding(0, 1),
+		Cell:     lipgloss.NewStyle().Padding(0, 1),
+		Selected: s.Cursor,
+	}
+}
+
+// applyStyles re-themes the table: both its chrome (SetStyles) and its row
+// content, since cell values carry theme-colored glyphs baked in as ANSI text.
+func (m *inventoryModel) applyStyles(s Styles) {
+	m.styles = s
+	m.tbl.SetStyles(tableStylesFor(m.styles))
+	m.syncTableRows()
 }
 
 func (m *inventoryModel) mergeProvider(provider core.CloudProviderID, vms []core.VM) {
@@ -84,7 +123,7 @@ func (m *inventoryModel) recompute() {
 		m.filteredVM = append(m.filteredVM, v)
 	}
 	m.applySort()
-	m.syncRows()
+	m.syncTableRows()
 }
 
 func (m *inventoryModel) applySort() {
@@ -114,66 +153,74 @@ func (m *inventoryModel) applySort() {
 	sort.SliceStable(m.filteredVM, less)
 }
 
-func (m *inventoryModel) syncRows() {
-	if m.cursor >= len(m.filteredVM) && len(m.filteredVM) > 0 {
-		m.cursor = len(m.filteredVM) - 1
+// syncTableRows rebuilds the table's rows from filteredVM. table.Model.SetRows
+// clamps the cursor to the new row count itself, replacing the old manual
+// syncRows() cursor-clamp.
+func (m *inventoryModel) syncTableRows() {
+	rows := make([]table.Row, len(m.filteredVM))
+	for i, vm := range m.filteredVM {
+		rows[i] = m.vmToRow(vm)
 	}
-	if len(m.filteredVM) == 0 {
-		m.cursor = 0
+	m.tbl.SetRows(rows)
+}
+
+func (m inventoryModel) vmToRow(vm core.VM) table.Row {
+	mark := "  "
+	if m.marked[vm.ID] {
+		mark = m.styles.Warn.Render("*") + " "
 	}
+	dot := lipgloss.NewStyle().Foreground(ProviderColor(vm.Provider)).Render("●")
+	return table.Row{mark, dot + " " + vm.Name, string(vm.Provider), string(vm.Region), string(vm.Type), stateGlyph(m.styles, vm.State)}
 }
 
 // Update handles inventory keys; connect/stop return commands to App.
-func (m inventoryModel) Update(msg tea.KeyPressMsg, s Styles) (inventoryModel, tea.Cmd, appIntent) {
-	switch msg.String() {
-	case "j", "down":
-		if m.cursor < len(m.filteredVM)-1 {
-			m.cursor++
-		}
-	case "k", "up":
-		if m.cursor > 0 {
-			m.cursor--
-		}
-	case "G":
-		m.cursor = len(m.filteredVM) - 1
-	case " ":
+func (m *inventoryModel) Update(msg tea.KeyPressMsg, k KeyMap, s Styles) (inventoryModel, tea.Cmd, appIntent) {
+	m.applyStyles(s)
+	switch {
+	case key.Matches(msg, k.Mark):
 		if len(m.filteredVM) > 0 {
-			id := m.filteredVM[m.cursor].ID
+			id := m.filteredVM[m.tbl.Cursor()].ID
 			m.marked[id] = !m.marked[id]
 		}
-	case "a":
+		m.syncTableRows()
+	case key.Matches(msg, k.MarkAll):
 		m.toggleMarkAll()
-	case "enter":
+		m.syncTableRows()
+	case key.Matches(msg, k.Enter):
 		m.showDetail = !m.showDetail
-	case "c":
-		return m, nil, appIntent{kind: intentConnect, targets: m.connectTargets()}
-	case "S":
-		return m, nil, appIntent{kind: intentStop, targets: m.connectTargets()}
-	case "p":
+		m.applyTableHeight()
+	case key.Matches(msg, k.Connect):
+		return *m, nil, appIntent{kind: intentConnect, targets: m.connectTargets()}
+	case key.Matches(msg, k.Stop):
+		return *m, nil, appIntent{kind: intentStop, targets: m.connectTargets()}
+	case key.Matches(msg, k.FilterProv):
 		providersIds := append(m.svc.CloudProvidersIDs(), core.CloudProviderID(""))
 		m.fProvider = cycle(m.fProvider, providersIds...)
 		m.recompute()
-	case "f":
+	case key.Matches(msg, k.FilterState):
 		states := []core.VMState{core.StateRunning, core.StateStopped, core.StateStarting, core.StateStopping, core.StateUnknown, ""}
 		m.fState = cycle(m.fState, states...)
 		m.recompute()
-	case "r":
+	case key.Matches(msg, k.FilterRegion):
 		m.cycleRegion()
 		m.recompute()
-	case "x":
+	case key.Matches(msg, k.ClearFilters):
 		m.clearFilters()
 		m.recompute()
-	case "o":
+	case key.Matches(msg, k.SortKey):
 		m.sortK = (m.sortK + 1) % 6
 		m.recompute()
-	case "O":
+	case key.Matches(msg, k.SortDir):
 		m.sortAsc = !m.sortAsc
 		m.recompute()
-	case "u":
-		return m, nil, appIntent{kind: intentRefresh}
+	case key.Matches(msg, k.Refresh):
+		return *m, nil, appIntent{kind: intentRefresh}
+	default:
+		// Every remaining key (movement, paging) is safe to forward unconditionally:
+		// inventoryTableKeyMap above guarantees no app-reserved letter is bound here.
+		m.tbl, _ = m.tbl.Update(msg)
 	}
-	m.syncRows()
-	return m, nil, appIntent{}
+	return *m, nil, appIntent{}
 }
 
 // stateGlyph renders the exact glyphs from the mockup with theme colors.
@@ -194,7 +241,7 @@ func stateGlyph(s Styles, st core.VMState) string {
 
 // connectTargets returns marked VMs (or the cursor VM), splitting out the ones
 // with no permission so App can flash "N opened · M skipped (no permission)".
-func (m inventoryModel) connectTargets() []core.VM {
+func (m *inventoryModel) connectTargets() []core.VM {
 	var out []core.VM
 	if anyMarked(m.marked) {
 		for _, v := range m.filteredVM {
@@ -203,7 +250,7 @@ func (m inventoryModel) connectTargets() []core.VM {
 			}
 		}
 	} else if len(m.filteredVM) > 0 {
-		out = append(out, m.filteredVM[m.cursor])
+		out = append(out, m.filteredVM[m.tbl.Cursor()])
 	}
 	return out
 }
@@ -265,88 +312,51 @@ func (m *inventoryModel) clearFilters() {
 	m.query = ""
 }
 
-func (m inventoryModel) View(s Styles, w, h int) string {
-	if len(m.filteredVM) == 0 {
-		msg := s.Dim.Render("no vms match filters — press u to refresh")
-		if len(m.allVM) == 0 {
-			msg = s.Dim.Render("no vms loaded — sign in and press u or R to sync providers")
-		}
-		return lipgloss.Place(w, h, lipgloss.Left, lipgloss.Top, msg)
-	}
+// SetSize stores the available area and resizes the table (reserving room for
+// the detail panel when it's open).
+func (m *inventoryModel) SetSize(w, h int) {
+	m.width, m.height = w, h
+	m.applyTableHeight()
+}
 
-	head := s.SectionHead.Render(fmt.Sprintf(
-		"  NAME%20sPROVIDER  REGION          TYPE            STATE", "",
-	))
-
-	var rows []string
-	rows = append(rows, head)
-	visible := h - 1
+func (m *inventoryModel) applyTableHeight() {
+	h := m.height
 	if m.showDetail {
-		visible -= 6
+		h -= 6
 	}
-	if visible < 1 {
-		visible = 1
+	if h < 1 {
+		h = 1
 	}
-	start := 0
-	if m.cursor >= visible {
-		start = m.cursor - visible + 1
-	}
-	end := start + visible
-	if end > len(m.filteredVM) {
-		end = len(m.filteredVM)
-	}
-
-	for i := start; i < end; i++ {
-		v := m.filteredVM[i]
-		rows = append(rows, m.renderRow(s, v, i == m.cursor))
-	}
-
-	body := strings.Join(rows, "\n")
-	if m.showDetail && m.cursor < len(m.filteredVM) {
-		body += "\n\n" + m.detailView(s, m.filteredVM[m.cursor])
-	}
-	return lipgloss.NewStyle().Width(w).Height(h).Render(body)
+	m.tbl.SetWidth(m.width)
+	m.tbl.SetHeight(h)
 }
 
-func (m inventoryModel) renderRow(s Styles, vm core.VM, selected bool) string {
-	mark := "  "
-	if m.marked[vm.ID] {
-		mark = s.Warn.Render("* ")
+func (m *inventoryModel) View() string {
+	if len(m.filteredVM) == 0 {
+		msg := m.styles.Dim.Render("no vms match filters — press u to refresh")
+		if len(m.allVM) == 0 {
+			msg = m.styles.Dim.Render("no vms loaded — sign in and press u or R to sync providers")
+		}
+		return lipgloss.Place(m.width, m.height, lipgloss.Left, lipgloss.Top, msg)
 	}
-	cur := "  "
-	if selected {
-		cur = s.Accent.Render("▸ ")
+
+	body := m.tbl.View()
+	if m.showDetail {
+		if c := m.tbl.Cursor(); c < len(m.filteredVM) {
+			body += "\n\n" + m.detailView(m.filteredVM[c])
+		}
 	}
-	dot := lipgloss.NewStyle().Foreground(ProviderColor(vm.Provider)).Render("●")
-	name := padRight(vm.Name, 26)
-	prov := padRight(string(vm.Provider), 9)
-	region := padRight(string(vm.Region), 15)
-	typ := padRight(string(vm.Type), 18)
-	state := stateGlyph(s, vm.State)
-	line := cur + mark + dot + " " + name + prov + region + typ + state
-	if selected {
-		return s.Cursor.Render(line)
-	}
-	if m.marked[vm.ID] {
-		return s.Marked.Render(line)
-	}
-	return line
+	return lipgloss.NewStyle().Width(m.width).Height(m.height).Render(body)
 }
 
-func (m inventoryModel) detailView(s Styles, vm core.VM) string {
+func (m *inventoryModel) detailView(vm core.VM) string {
 	lines := []string{
-		s.SectionHead.Render("INSTANCE DETAIL"),
-		s.Text.Render("name:    ") + s.Accent.Render(vm.Name),
-		s.Text.Render("id:      ") + s.Dim.Render(vm.ID),
-		s.Text.Render("ip:      ") + s.Cyan.Render(string(vm.PrivateIP)),
-		s.Text.Render("method:  ") + s.Text.Render("unknown (not implemented yet)"),
-		s.Text.Render("tags:    ") + s.Dim.Render(formatTags(vm.Tags)),
+		m.styles.SectionHead.Render("INSTANCE DETAIL"),
+		m.styles.Text.Render("name:    ") + m.styles.Accent.Render(vm.Name),
+		m.styles.Text.Render("id:      ") + m.styles.Dim.Render(vm.ID),
+		m.styles.Text.Render("ip:      ") + m.styles.Cyan.Render(string(vm.PrivateIP)),
+		m.styles.Text.Render("method:  ") + m.styles.Text.Render("unknown (not implemented yet)"),
+		m.styles.Text.Render("tags:    ") + m.styles.Dim.Render(formatTags(vm.Tags)),
 	}
 	return strings.Join(lines, "\n")
-}
-func padRight(s string, n int) string {
-	if len(s) >= n {
-		return s[:n]
-	}
-	return s + strings.Repeat(" ", n-len(s))
 }

@@ -84,12 +84,12 @@ func New(svc *service.Service) *App {
 		styles:   NewStyles(th),
 		screen:   screenLogin,
 	}
-	a.login = newLoginModel(svc)
-	a.inv = newInventoryModel(svc)
-	a.sess = newSessionsModel(svc)
-	a.audit = newAuditModel(svc)
-	a.settings = newSettingsModel(svc)
-	a.palette = newPaletteModel()
+	a.login = newLoginModel(svc, a.styles)
+	a.inv = newInventoryModel(svc, a.styles)
+	a.sess = newSessionsModel(svc, a.styles)
+	a.audit = newAuditModel(svc, a.styles)
+	a.settings = newSettingsModel(svc, a.styles)
+	a.palette = newPaletteModel(a.styles)
 	a.help = newHelpModel()
 	a.logs = newLogPane()
 	return a
@@ -97,6 +97,20 @@ func New(svc *service.Service) *App {
 
 // SetSend wires program.Send so async callbacks (device code) can inject msgs.
 func (a *App) SetSend(f func(tea.Msg)) { a.send = f }
+
+// setTheme is the single place that switches themes, so every component that
+// bakes theme colors into its own state (e.g. the inventory table's styles
+// and pre-rendered row glyphs) gets re-synced consistently.
+func (a *App) setTheme(themeIdx int) {
+	a.themeIdx = themeIdx
+	a.styles = NewStyles(Themes[themeIdx])
+	// a.login.applyStyles(a.styles)
+	a.inv.applyStyles(a.styles)
+	a.audit.applyStyles(a.styles)
+	a.sess.applyStyles(a.styles)
+	// a.settings.applyStyles(a.styles)
+	a.palette.applyStyles(a.styles)
+}
 
 func (a *App) Init() tea.Cmd {
 	// The braille spinner starts ticking immediately for the login/sync UI.
@@ -120,7 +134,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a.updateOverlay(msg)
 		}
 		if a.screen == screenLogin {
-			m, cmd := a.login.Update(msg, a.send)
+			m, cmd := a.login.Update(msg, a.send, a.styles)
 			a.login = m
 			return a, cmd
 		}
@@ -218,7 +232,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (a *App) View() tea.View {
 	var body string
 	if a.screen == screenLogin {
-		body = a.login.View(a.styles, a.width, a.height)
+		body = a.login.View(a.width, a.height)
 	} else {
 		body = a.appView()
 	}
@@ -236,20 +250,66 @@ func (a *App) View() tea.View {
 	return v
 }
 
+// composeOverlay centers the current overlay box over the background using the
+// Lip Gloss v2 compositor. This is the key v2 win: overlays are first-class,
+// so we don't hand-roll the line-by-line slicing overlay hack that v1 needed.
+func (a *App) composeOverlay(background string) string {
+	var fg string
+	switch a.overlay {
+	case overlayPalette:
+		fg = a.palette.View()
+	case overlayHelp:
+		fg = a.help.View(a.styles, a.keys)
+	case overlayConfirmQuit:
+		fg = a.confirmQuitView()
+	default:
+		return background
+	}
+
+	fgW, fgH := lipgloss.Size(fg)
+	x := (a.width - fgW) / 2
+	y := (a.height - fgH) / 2
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
+
+	comp := lipgloss.NewCompositor(
+		lipgloss.NewLayer(background),        // z 0
+		lipgloss.NewLayer(fg).X(x).Y(y).Z(1), // z 1: floats on top, centered
+	)
+	return lipgloss.NewCanvas(a.width, a.height).Compose(comp).Render()
+}
+
+func (a *App) confirmQuitView() string {
+	title := a.styles.Err.Bold(true).Render("sign out of stratus?")
+	body := a.styles.Dim.Render("you'll need to re-authenticate with your identity\nprovider next time you start stratus.")
+	footer := a.styles.Dim.Render("⏎/y confirm · esc/n cancel")
+	return a.styles.ModalBox.Render(title + "\n\n" + body + "\n\n" + footer)
+}
+
 // appView assembles header + filter line + banners + active tab + status bar
 // (+ optional log pane), using lipgloss.JoinVertical.
 func (a *App) appView() string {
+	// contentHeight() depends on more than window size (active tab, showLogs,
+	// banner count), so re-propagate on every render rather than only on
+	// WindowSizeMsg — otherwise a tab switch or banner append would leave the
+	// converted sub-models' cached table/list sizes stale.
+	a.propagateSize()
+
 	header := a.headerView()
 	var mid string
 	switch a.tab {
 	case tabInventory:
-		mid = a.inv.View(a.styles, a.width, a.contentHeight())
+		mid = a.inv.View()
 	case tabSessions:
-		mid = a.sess.View(a.styles, a.width, a.contentHeight())
+		mid = a.sess.View()
 	case tabAudit:
-		mid = a.audit.View(a.styles, a.width, a.contentHeight())
+		mid = a.audit.View()
 	case tabSettings:
-		mid = a.settings.View(a.styles, a.width, a.contentHeight(), a.themeIdx)
+		mid = a.settings.View(a.width, a.contentHeight(), a.themeIdx)
 	}
 	parts := []string{header}
 	if a.tab != tabSettings {

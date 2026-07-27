@@ -3,15 +3,16 @@ package tui
 import (
 	"time"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"github.com/muhamm-ad/stratus/internal/core"
 )
 
 func (a *App) updateAppKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	key := msg.String()
+	keyStr := msg.String()
 
 	if a.searchMode {
-		switch key {
+		switch keyStr {
 		case "esc":
 			a.searchMode = false
 			return a, nil
@@ -26,16 +27,16 @@ func (a *App) updateAppKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 			return a, nil
 		default:
-			if len(key) == 1 {
-				a.searchBuf += key
+			if len(keyStr) == 1 {
+				a.searchBuf += keyStr
 			}
 			return a, nil
 		}
 	}
 
-	if key == "g" {
+	if keyStr == "g" {
 		if time.Since(a.lastG) < 450*time.Millisecond {
-			a.inv.cursor = 0
+			a.inv.tbl.GotoTop()
 			a.lastG = time.Time{}
 			return a, nil
 		}
@@ -44,41 +45,40 @@ func (a *App) updateAppKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch {
-	case key == "1":
+	case key.Matches(msg, a.keys.Tab1):
 		a.tab = tabInventory
 		return a, nil
-	case key == "2":
+	case key.Matches(msg, a.keys.Tab2):
 		a.tab = tabSessions
 		return a, nil
-	case key == "3":
+	case key.Matches(msg, a.keys.Tab3):
 		a.tab = tabAudit
 		return a, nil
-	case key == "4":
+	case key.Matches(msg, a.keys.Tab4):
 		a.tab = tabSettings
 		return a, nil
-	case key == "/":
+	case key.Matches(msg, a.keys.Search):
 		if a.tab == tabInventory {
 			a.searchMode = true
 			a.searchBuf = ""
 		}
 		return a, nil
-	case key == ":":
+	case key.Matches(msg, a.keys.Cmd):
 		a.overlay = overlayPalette
 		return a, a.palette.open()
-	case key == "?":
+	case key.Matches(msg, a.keys.Help):
 		a.overlay = overlayHelp
 		return a, nil
-	case key == "L":
+	case key.Matches(msg, a.keys.Logs):
 		a.showLogs = !a.showLogs
 		return a, nil
-	case key == "t":
-		a.themeIdx = (a.themeIdx + 1) % len(Themes)
-		a.styles = NewStyles(Themes[a.themeIdx])
+	case key.Matches(msg, a.keys.Theme):
+		a.setTheme((a.themeIdx + 1) % len(Themes))
 		return a, nil
-	case key == "q":
+	case key.Matches(msg, a.keys.Quit):
 		a.overlay = overlayConfirmQuit
 		return a, nil
-	case key == "R":
+	case key.Matches(msg, a.keys.Reconnect):
 		return a, tea.Batch(
 			syncProviderCmds(a.svc, false)...,
 		)
@@ -86,19 +86,18 @@ func (a *App) updateAppKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	switch a.tab {
 	case tabInventory:
-		m, cmd, intent := a.inv.Update(msg, a.styles)
+		m, cmd, intent := a.inv.Update(msg, a.keys, a.styles)
 		a.inv = m
 		return a.handleIntent(intent, cmd)
 	case tabSessions:
-		return a, a.sess.Update(msg)
+		return a, a.sess.Update(msg, a.keys)
 	case tabAudit:
 		return a, a.audit.Update(msg)
 	case tabSettings:
-		sm, scmd := a.settings.Update(msg, a.themeIdx)
+		sm, scmd := a.settings.Update(msg, a.themeIdx, a.styles)
 		a.settings = sm
 		if scmd != nil {
-			a.themeIdx = scmd.themeIdx
-			a.styles = NewStyles(Themes[a.themeIdx])
+			a.setTheme(scmd.themeIdx)
 		}
 		return a, nil
 	}
@@ -254,8 +253,7 @@ func (a *App) runPaletteCommand(c command) tea.Cmd {
 	case "help":
 		a.overlay = overlayHelp
 	case "theme":
-		a.themeIdx = (a.themeIdx + 1) % len(Themes)
-		a.styles = NewStyles(Themes[a.themeIdx])
+		a.setTheme((a.themeIdx + 1) % len(Themes))
 	case "quit":
 		a.overlay = overlayConfirmQuit
 	case "reconnect":

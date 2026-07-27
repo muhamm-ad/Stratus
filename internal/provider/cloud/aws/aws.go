@@ -3,8 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
-	"strings"
-
+	
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -181,14 +180,14 @@ func (p *AWSProvider) Logout(ctx context.Context) error {
 	return nil
 }
 
-func (p *AWSProvider) getAccount() (core.Account, error) {
-	parts := strings.Split(p.cfg.RoleArn, ":")
-	if len(parts) >= 5 {
-		return core.Account{
-			ID:    parts[4],
-			Name:  parts[4],
-			Roles: []string{p.cfg.RoleArn},
-		}, nil
-	}
-	return core.Account{}, fmt.Errorf("aws: error getting account from role ARN")
-}
+// func (p *AWSProvider) getAccount() (core.Account, error) {
+// 	parts := strings.Split(p.cfg.RoleArn, ":")
+// 	if len(parts) >= 5 {
+// 		return core.Account{
+// 			ID:    parts[4],
+// 			Name:  parts[4],
+// 			Roles: []string{p.cfg.RoleArn},
+// 		}, nil
+// 	}
+// 	return core.Account{}, fmt.Errorf("aws: error getting account from role ARN")
+// }

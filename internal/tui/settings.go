@@ -19,19 +19,25 @@ type CLIStatus struct {
 // settingsModel renders providers, auto-refresh, theme, and LOCAL CLI DETECTION.
 type settingsModel struct {
 	svc         *service.Service
+	styles      Styles
 	cursor      int
 	autoRefresh bool
 	clis        []CLIStatus
 }
 
-func newSettingsModel(svc *service.Service) settingsModel {
+func newSettingsModel(svc *service.Service, s Styles) settingsModel {
 	clis := detectCLIs()
-	return settingsModel{svc: svc, autoRefresh: true, clis: clis}
+	return settingsModel{svc: svc, styles: s, autoRefresh: true, clis: clis}
 }
 
 type settingsCmd struct{ themeIdx int }
 
-func (m settingsModel) Update(msg tea.KeyPressMsg, themeIdx int) (settingsModel, *settingsCmd) {
+func (m *settingsModel) applyStyles(s Styles) {
+	m.styles = s
+}
+
+func (m *settingsModel) Update(msg tea.KeyPressMsg, themeIdx int, s Styles) (settingsModel, *settingsCmd) {
+	m.applyStyles(s)
 	switch msg.String() {
 	case "j", "down":
 		if m.cursor < 3 {
@@ -47,35 +53,35 @@ func (m settingsModel) Update(msg tea.KeyPressMsg, themeIdx int) (settingsModel,
 			m.autoRefresh = !m.autoRefresh
 		case 2:
 			idx := (themeIdx + 1) % len(Themes)
-			return m, &settingsCmd{themeIdx: idx}
+			return *m, &settingsCmd{themeIdx: idx}
 		}
 	}
-	return m, nil
+	return *m, nil
 }
 
-func (m settingsModel) View(s Styles, w, h int, themeIdx int) string {
-	head := s.SectionHead.Render("PROVIDERS & PREFERENCES · j/k move · ⏎ toggle/cycle")
-	cliHead := s.SectionHead.Render("LOCAL CLI DETECTION")
+func (m *settingsModel) View(w, h int, themeIdx int) string {
+	head := m.styles.SectionHead.Render("PROVIDERS & PREFERENCES · j/k move · ⏎ toggle/cycle")
+	cliHead := m.styles.SectionHead.Render("LOCAL CLI DETECTION")
 	var cliRows []string
 	for _, c := range m.clis {
 		if c.Detected {
-			cliRows = append(cliRows, s.OK.Render("✓ ")+s.Text.Render(c.Name+" detected"))
+			cliRows = append(cliRows, m.styles.OK.Render("✓ ")+m.styles.Text.Render(c.Name+" detected"))
 		} else {
-			cliRows = append(cliRows, s.Err.Render("✗ ")+s.Text.Render(c.Name+" missing — "+c.Hint))
+			cliRows = append(cliRows, m.styles.Err.Render("✗ ")+m.styles.Text.Render(c.Name+" missing — "+c.Hint))
 		}
 	}
-	return renderSettings(s, w, head, cliHead, cliRows, m, themeIdx)
+	return m.renderSettings(w, head, cliHead, cliRows, themeIdx)
 }
 
-func renderSettings(s Styles, w int, head, cliHead string, cliRows []string, m settingsModel, themeIdx int) string {
+func (m *settingsModel) renderSettings(w int, head, cliHead string, cliRows []string, themeIdx int) string {
 	refresh := "[off]"
 	if m.autoRefresh {
 		refresh = "[on] every 60s"
 	}
 	rows := []string{
-		row(s, m.cursor == 0, "providers", "aws · azure · gcp — status via inventory sync"),
-		row(s, m.cursor == 1, "auto-refresh", refresh),
-		row(s, m.cursor == 2, "theme", Themes[themeIdx].Name+" (charm · stratus · mono · terminal)"),
+		row(m.styles, m.cursor == 0, "providers", "aws · azure · gcp — status via inventory sync"),
+		row(m.styles, m.cursor == 1, "auto-refresh", refresh),
+		row(m.styles, m.cursor == 2, "theme", Themes[themeIdx].Name+" (charm · stratus · mono · terminal)"),
 	}
 	body := head + "\n\n" + strings.Join(rows, "\n") + "\n\n" + cliHead + "\n" + strings.Join(cliRows, "\n")
 	return lipgloss.NewStyle().Width(w).Render(body)

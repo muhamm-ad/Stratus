@@ -8,8 +8,10 @@ import (
 )
 
 func (a *App) propagateSize() {
-	a.inv.tbl.SetWidth(a.width)
-	a.inv.tbl.SetHeight(a.contentHeight())
+	h := a.contentHeight()
+	a.inv.SetSize(a.width, h)
+	a.audit.SetSize(a.width, h)
+	a.sess.SetSize(a.width, h)
 }
 
 func (a *App) contentHeight() int {
