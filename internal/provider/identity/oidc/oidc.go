@@ -49,12 +49,12 @@ func (p *OIDCIdentityProvider) ensure(ctx context.Context) (*auth.Session, error
 		err    error
 	)
 	if p.cfg.Issuer != "" {
-		client, err = auth.NewClient(ctx, p.cfg.Issuer, p.cfg.ClientID, p.cfg.scopes())
+		client, err = auth.NewClient(ctx, p.cfg.Issuer, p.cfg.ClientID, p.cfg.Scopes)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		client = auth.NewClientManual(p.cfg.ClientID, p.cfg.AuthorizeEndpoint, p.cfg.TokenEndpoint, p.cfg.scopes())
+		client = auth.NewClientManual(p.cfg.ClientID, p.cfg.AuthorizeEndpoint, p.cfg.TokenEndpoint, p.cfg.Scopes)
 	}
 	store := auth.Store{Service: "stratus", Key: "oidc:" + string(p.id)}
 	p.sess = auth.NewSession(client, store, p.cfg.UseDeviceFlow)

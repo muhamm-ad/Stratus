@@ -30,8 +30,10 @@ type IdentityProvider interface {
 	
 	// IsAuthenticated reports whether a valid OIDC session exists.
 	IsAuthenticated() bool
+	
 	// IDToken returns a valid (refreshed if needed) id_token for federation.
 	IDToken(ctx context.Context) (string, error)
+
 	// AccessToken silently acquires an access token for the given scopes via the
 	// refresh token (e.g. the Azure ARM scope). Only meaningful when the issuer
 	// can grant those scopes.

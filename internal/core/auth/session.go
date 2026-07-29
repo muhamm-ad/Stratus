@@ -113,7 +113,7 @@ func (s *Session) AccessToken(ctx context.Context, scopes ...string) (string, er
 	// token to (e.g.) the ARM resource must use our explicit RefreshGrant.
 	t, err := RefreshGrant(ctx, http.DefaultClient, s.client.OAuth.Endpoint.TokenURL, s.client.OAuth.ClientID, tok.RefreshToken, scopes)
 	if err != nil {
-		return "", core.ErrTokenExpired
+		return "", fmt.Errorf("%w: %v", core.ErrTokenExpired, err)
 	}
 	if t.RefreshToken != "" && t.RefreshToken != tok.RefreshToken {
 		s.mu.Lock()

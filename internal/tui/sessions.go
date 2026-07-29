@@ -56,7 +56,21 @@ type sessionsModel struct {
 }
 
 func newSessionsModel(svc *service.Service, s Styles) sessionsModel {
-	return sessionsModel{svc: svc, list: list.New(nil, nil, 0, 0), styles: s}
+	// DefaultDelegate is only used for height/pagination math — rows render in View.
+	d := list.NewDefaultDelegate()
+	d.ShowDescription = false
+	d.SetSpacing(0)
+
+	l := list.New(nil, d, 0, 0)
+	l.SetShowTitle(false)
+	l.SetShowStatusBar(false)
+	l.SetShowHelp(false)
+	l.SetShowPagination(true)
+	l.SetFilteringEnabled(false)
+	// list.Model's default Quit ("q"/"esc") would otherwise fire once a
+	// keypress falls through to this tab.
+	l.DisableQuitKeybindings()
+	return sessionsModel{svc: svc, list: l, styles: s}
 }
 
 func (m *sessionsModel) Render(w io.Writer, l list.Model, index int, item list.Item) {

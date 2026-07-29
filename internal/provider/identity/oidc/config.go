@@ -17,12 +17,7 @@ type Config struct {
 	UseDeviceFlow bool `json:"use_device_flow,omitempty"`
 }
 
-func (c Config) scopes() []string {
-	if len(c.Scopes) == 0 {
-		return []string{"openid", "offline_access"}
-	}
-	return c.Scopes
-}
+var DefaultScopes = []string{"openid", "offline_access"}
 
 func (c Config) hasEndpoints() bool { return c.AuthorizeEndpoint != "" && c.TokenEndpoint != "" }
 
@@ -32,6 +27,9 @@ func ParseConfig(raw json.RawMessage) (Config, error) {
 		if err := json.Unmarshal(raw, &c); err != nil {
 			return c, fmt.Errorf("oidc: invalid config section: %w", err)
 		}
+	}
+	if len(c.Scopes) == 0 {
+		c.Scopes = append([]string{}, DefaultScopes...)
 	}
 	return c, c.Validate()
 }
