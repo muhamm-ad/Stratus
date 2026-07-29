@@ -30,7 +30,6 @@ type inventoryModel struct {
 	filteredVM    []core.VM
 	marked        map[string]bool
 	tbl           table.Model
-	showDetail    bool
 	width, height int
 
 	fProvider core.CloudProviderID
@@ -44,8 +43,8 @@ type inventoryModel struct {
 func newInventoryModel(svc *service.Service, s Styles) inventoryModel {
 	t := table.New(
 		table.WithColumns([]table.Column{
-			{Title: "", Width: 2},
-			{Title: "NAME", Width: 28},
+			{Title: "", Width: 1}, // ✓
+			{Title: "NAME", Width: 30},
 			{Title: "PROVIDER", Width: 9},
 			{Title: "REGION", Width: 15},
 			{Title: "TYPE", Width: 18},
@@ -53,14 +52,14 @@ func newInventoryModel(svc *service.Service, s Styles) inventoryModel {
 		}),
 		table.WithKeyMap(inventoryTableKeyMap()),
 		table.WithFocused(true),
-		table.WithStyles(tableStylesFor(s)),
+		table.WithStyles(setTableStyles(s)),
 	)
 	return inventoryModel{svc: svc, styles: s, marked: map[string]bool{}, tbl: t, sortAsc: true}
 }
 
 // inventoryTableKeyMap mirrors the app's own navigation keys (k/j/g/G) but
-// strips PageUp/PageDown/HalfPageUp's default "b"/"f"/"space"/"u" bindings —
-// those letters are already claimed by FilterState, Mark, and Refresh.
+// strips PageDown/HalfPageDown's default "f"/"space" bindings — those are
+// already claimed by FilterState and other app keys.
 func inventoryTableKeyMap() table.KeyMap {
 	return table.KeyMap{
 		LineUp:       key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k/↑", "up")),
@@ -76,19 +75,23 @@ func inventoryTableKeyMap() table.KeyMap {
 	}
 }
 
-func tableStylesFor(s Styles) table.Styles {
-	return table.Styles{
-		Header:   s.SectionHead.Bold(true).Padding(0, 1),
-		Cell:     lipgloss.NewStyle().Padding(0, 1),
-		Selected: s.Cursor,
-	}
+func setTableStyles(s Styles) table.Styles {
+	style := table.DefaultStyles()
+	style.Header = s.SectionHead.BorderBottom(true).Padding(0, 1)
+	style.Cell = lipgloss.NewStyle().Padding(0, 1)
+	// Full-row selection style from bubbles table, themed with Accent.
+	style.Selected = lipgloss.NewStyle().
+		Background(s.th.Surface2).
+		Foreground(s.th.Text).
+		Bold(true)
+	return style
 }
 
-// applyStyles re-themes the table: both its chrome (SetStyles) and its row
+// SetStyles re-themes the table: both its chrome (SetStyles) and its row
 // content, since cell values carry theme-colored glyphs baked in as ANSI text.
-func (m *inventoryModel) applyStyles(s Styles) {
+func (m *inventoryModel) SetStyles(s Styles) {
 	m.styles = s
-	m.tbl.SetStyles(tableStylesFor(m.styles))
+	m.tbl.SetStyles(setTableStyles(s))
 	m.syncTableRows()
 }
 
@@ -159,23 +162,36 @@ func (m *inventoryModel) applySort() {
 func (m *inventoryModel) syncTableRows() {
 	rows := make([]table.Row, len(m.filteredVM))
 	for i, vm := range m.filteredVM {
-		rows[i] = m.vmToRow(vm)
+		rows[i] = m.vmToRow(vm, i == m.tbl.Cursor())
 	}
 	m.tbl.SetRows(rows)
 }
 
-func (m inventoryModel) vmToRow(vm core.VM) table.Row {
-	mark := "  "
+func (m inventoryModel) vmToRow(vm core.VM, selected bool) table.Row {
+	check := " "
 	if m.marked[vm.ID] {
-		mark = m.styles.Warn.Render("*") + " "
+		if selected {
+			check = "✓"
+		} else {
+			check = m.styles.OK.Render("✓")
+		}
 	}
-	dot := lipgloss.NewStyle().Foreground(ProviderColor(vm.Provider)).Render("●")
-	return table.Row{mark, dot + " " + vm.Name, string(vm.Provider), string(vm.Region), string(vm.Type), stateGlyph(m.styles, vm.State)}
+	dot := "●"
+	if !selected {
+		dot = lipgloss.NewStyle().Foreground(ProviderColor(vm.Provider)).Render("●")
+	}
+	return table.Row{
+		check,
+		dot + " " + vm.Name,
+		string(vm.Provider),
+		string(vm.Region),
+		string(vm.Type),
+		stateGlyph(m.styles, vm.State, selected),
+	}
 }
 
-// Update handles inventory keys; connect/stop return commands to App.
 func (m *inventoryModel) Update(msg tea.KeyPressMsg, k KeyMap, s Styles) (inventoryModel, tea.Cmd, appIntent) {
-	m.applyStyles(s)
+	m.SetStyles(s)
 	switch {
 	case key.Matches(msg, k.Mark):
 		if len(m.filteredVM) > 0 {
@@ -187,12 +203,15 @@ func (m *inventoryModel) Update(msg tea.KeyPressMsg, k KeyMap, s Styles) (invent
 		m.toggleMarkAll()
 		m.syncTableRows()
 	case key.Matches(msg, k.Enter):
-		m.showDetail = !m.showDetail
-		m.applyTableHeight()
+		if _, ok := m.selectedVM(); ok {
+			return *m, nil, appIntent{kind: intentShowDetail}
+		}
 	case key.Matches(msg, k.Connect):
-		return *m, nil, appIntent{kind: intentConnect, targets: m.connectTargets()}
+		return *m, nil, appIntent{kind: intentConnect, targets: m.selectedVMs()}
+	case key.Matches(msg, k.Start):
+		return *m, nil, appIntent{kind: intentStart, targets: m.selectedVMs()}
 	case key.Matches(msg, k.Stop):
-		return *m, nil, appIntent{kind: intentStop, targets: m.connectTargets()}
+		return *m, nil, appIntent{kind: intentStop, targets: m.selectedVMs()}
 	case key.Matches(msg, k.FilterProv):
 		providersIds := append(m.svc.CloudProvidersIDs(), core.CloudProviderID(""))
 		m.fProvider = cycle(m.fProvider, providersIds...)
@@ -219,29 +238,47 @@ func (m *inventoryModel) Update(msg tea.KeyPressMsg, k KeyMap, s Styles) (invent
 		// Every remaining key (movement, paging) is safe to forward unconditionally:
 		// inventoryTableKeyMap above guarantees no app-reserved letter is bound here.
 		m.tbl, _ = m.tbl.Update(msg)
+		m.syncTableRows()
 	}
 	return *m, nil, appIntent{}
 }
 
 // stateGlyph renders the exact glyphs from the mockup with theme colors.
-func stateGlyph(s Styles, st core.VMState) string {
+func stateGlyph(s Styles, st core.VMState, selected bool) string {
+	var label string
 	switch st {
 	case core.StateRunning:
-		return s.OK.Render("● running")
+		label = "● running"
 	case core.StateStopped:
-		return s.Err.Render("○ stopped")
+		label = "○ stopped"
 	case core.StateStarting:
-		return s.Warn.Render("◐ starting")
+		label = "◐ starting"
 	case core.StateStopping:
-		return s.Warn.Render("◑ stopping")
+		label = "◑ stopping"
 	default:
-		return s.Dim.Render("◌ unknown")
+		label = "◌ unknown"
 	}
+
+	if !selected {
+		switch st {
+		case core.StateRunning:
+			return s.OK.Render(label)
+		case core.StateStopped:
+			return s.Err.Render(label)
+		case core.StateStarting:
+			return s.Warn.Render(label)
+		case core.StateStopping:
+			return s.Warn.Render(label)
+		default:
+			return s.Dim.Render(label)
+		}
+	}
+	return label
 }
 
-// connectTargets returns marked VMs (or the cursor VM), splitting out the ones
-// with no permission so App can flash "N opened · M skipped (no permission)".
-func (m *inventoryModel) connectTargets() []core.VM {
+// selectedVMs returns every marked VM, or — when nothing is marked — the VM
+// under the cursor. App.connectCmd opens sessions for these (not implemented yet).
+func (m *inventoryModel) selectedVMs() []core.VM {
 	var out []core.VM
 	if anyMarked(m.marked) {
 		for _, v := range m.filteredVM {
@@ -249,7 +286,9 @@ func (m *inventoryModel) connectTargets() []core.VM {
 				out = append(out, v)
 			}
 		}
-	} else if len(m.filteredVM) > 0 {
+		return out
+	}
+	if len(m.filteredVM) > 0 {
 		out = append(out, m.filteredVM[m.tbl.Cursor()])
 	}
 	return out
@@ -312,8 +351,7 @@ func (m *inventoryModel) clearFilters() {
 	m.query = ""
 }
 
-// SetSize stores the available area and resizes the table (reserving room for
-// the detail panel when it's open).
+// SetSize stores the available area and resizes the table.
 func (m *inventoryModel) SetSize(w, h int) {
 	m.width, m.height = w, h
 	m.applyTableHeight()
@@ -321,9 +359,6 @@ func (m *inventoryModel) SetSize(w, h int) {
 
 func (m *inventoryModel) applyTableHeight() {
 	h := m.height
-	if m.showDetail {
-		h -= 6
-	}
 	if h < 1 {
 		h = 1
 	}
@@ -339,24 +374,35 @@ func (m *inventoryModel) View() string {
 		}
 		return lipgloss.Place(m.width, m.height, lipgloss.Left, lipgloss.Top, msg)
 	}
-
-	body := m.tbl.View()
-	if m.showDetail {
-		if c := m.tbl.Cursor(); c < len(m.filteredVM) {
-			body += "\n\n" + m.detailView(m.filteredVM[c])
-		}
-	}
-	return lipgloss.NewStyle().Width(m.width).Height(m.height).Render(body)
+	return lipgloss.NewStyle().Width(m.width).Height(m.height).Render(m.tbl.View())
 }
 
+// selectedVM returns the VM under the table cursor, if any.
+func (m *inventoryModel) selectedVM() (core.VM, bool) {
+	c := m.tbl.Cursor()
+	if c < 0 || c >= len(m.filteredVM) {
+		return core.VM{}, false
+	}
+	return m.filteredVM[c], true
+}
+
+// detailView renders the VM detail as a floating modal (App.composeOverlay
+// centers it over the inventory table via the Lip Gloss v2 compositor).
 func (m *inventoryModel) detailView(vm core.VM) string {
 	lines := []string{
-		m.styles.SectionHead.Render("INSTANCE DETAIL"),
+		m.styles.Accent.Bold(true).Render("instance detail"),
+		"",
 		m.styles.Text.Render("name:    ") + m.styles.Accent.Render(vm.Name),
 		m.styles.Text.Render("id:      ") + m.styles.Dim.Render(vm.ID),
+		m.styles.Text.Render("provider:") + " " + m.styles.Text.Render(string(vm.Provider)),
+		m.styles.Text.Render("region:  ") + m.styles.Text.Render(string(vm.Region)),
+		m.styles.Text.Render("type:    ") + m.styles.Text.Render(string(vm.Type)),
+		m.styles.Text.Render("state:   ") + stateGlyph(m.styles, vm.State, false),
 		m.styles.Text.Render("ip:      ") + m.styles.Cyan.Render(string(vm.PrivateIP)),
 		m.styles.Text.Render("method:  ") + m.styles.Text.Render("unknown (not implemented yet)"),
 		m.styles.Text.Render("tags:    ") + m.styles.Dim.Render(formatTags(vm.Tags)),
+		"",
+		m.styles.Dim.Render("esc/⏎ close"),
 	}
-	return strings.Join(lines, "\n")
+	return m.styles.OverlayBox.Width(56).Render(strings.Join(lines, "\n"))
 }

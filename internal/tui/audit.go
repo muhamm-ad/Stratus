@@ -100,7 +100,7 @@ func (m *auditModel) View() string {
 		e := item.(auditItem)
 		cur := "  "
 		if start+i == m.list.Index() {
-			cur = s.Accent.Render("▸ ")
+			cur = s.Cursor.Render("▸ ")
 		}
 		okGlyph := s.OK.Render("✓")
 		if !e.Success {

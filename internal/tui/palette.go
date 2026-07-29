@@ -26,6 +26,7 @@ var allCommands = []command{
 	{"tag", "tag <k:v>"},
 	{"clear", "clear all filters"},
 	{"connect", "connect to selection"},
+	{"start", "start selection"},
 	{"stop", "stop selection"},
 	{"refresh", "refresh inventory"},
 	{"reconnect", "reconnect <prov>"},
@@ -121,7 +122,7 @@ func (m paletteModel) View() string {
 			c := item.(paletteItem)
 			cur := "  "
 			if i == m.list.Index() {
-				cur = s.Accent.Render("▸ ")
+				cur = s.Cursor.Render("▸ ")
 			}
 			rows = append(rows, cur+s.Text.Render(c.name)+s.Dim.Render(" — "+c.desc))
 		}

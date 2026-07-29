@@ -1,7 +1,6 @@
 package tui
 
 import (
-	// "fmt"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -15,7 +14,7 @@ func (a *App) propagateSize() {
 }
 
 func (a *App) contentHeight() int {
-	h := a.height - 4 // header + filter + status
+	h := a.height - lipgloss.Height(a.topChromeView()) - 1
 	if a.tab != tabSettings {
 		h-- // filter line
 	}
@@ -31,15 +30,8 @@ func (a *App) contentHeight() int {
 	return h
 }
 
-func (a *App) headerView() string {
-	title := a.styles.Title.Render("S T R A T U S")
-	tabs := []string{
-		a.tabLabel("1 inventory", tabInventory),
-		a.tabLabel("2 sessions", tabSessions),
-		a.tabLabel("3 audit", tabAudit),
-		a.tabLabel("4 settings", tabSettings),
-	}
-	tabBar := lipgloss.JoinHorizontal(lipgloss.Top, tabs...)
+func (a *App) topChromeView() string {
+	tabBar := a.tabBarView()
 
 	_right := ""
 	if a.flash != "" {
@@ -54,20 +46,58 @@ func (a *App) headerView() string {
 		default:
 			flashStyle = a.styles.Accent
 		}
-		_right = a.styles.FilterLine.Width(a.width).Render(flashStyle.Render(a.flash))
+		_right = flashStyle.Render(a.flash)
 	}
 
-	right := lipgloss.NewStyle().Width(max(0, a.width-lipgloss.Width(title)-lipgloss.Width(tabBar)-5)).Align(lipgloss.Right).Render(_right)
+	gapWidth := max(0, a.width-lipgloss.Width(tabBar))
+	flash := lipgloss.NewStyle().Inline(true).MaxWidth(gapWidth).Render(_right)
+	gap := a.styles.TabInactive.
+		BorderTop(false).
+		BorderLeft(false).
+		BorderRight(false).
+		Padding(0, 0).
+		Width(gapWidth).
+		Align(lipgloss.Right).
+		Render(flash)
 	return a.styles.Header.Width(a.width).Render(
-		lipgloss.JoinHorizontal(lipgloss.Center, title, "  ", tabBar, " ", right),
+		lipgloss.JoinHorizontal(lipgloss.Bottom, tabBar, gap),
 	)
 }
 
-func (a *App) tabLabel(label string, t tab) string {
-	if a.tab == t {
-		return a.styles.TabActive.Render(label)
+func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
+	b := lipgloss.RoundedBorder()
+	b.BottomLeft = left
+	b.Bottom = middle
+	b.BottomRight = right
+	return b
+}
+
+var (
+	tabInactiveBorder = tabBorderWithBottom("┴", "─", "┴")
+	tabActiveBorder   = tabBorderWithBottom("┘", " ", "└")
+)
+
+func (a *App) tabBarView() string {
+	tabs := []struct {
+		label string
+		t     tab
+	}{
+		{"inventory [1]", tabInventory},
+		{"sessions [2]", tabSessions},
+		{"audit [3]", tabAudit},
+		{"settings [4]", tabSettings},
 	}
-	return a.styles.TabInactive.Render(label)
+
+	rendered := make([]string, len(tabs))
+	for i, tb := range tabs {
+		isActive := a.tab == tb.t
+		style := a.styles.TabInactive
+		if isActive {
+			style = a.styles.TabActive
+		}
+		rendered[i] = style.Render(tb.label)
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top, rendered...)
 }
 
 func (a *App) filterLineView() string {
@@ -103,7 +133,7 @@ func (a *App) filterLineView() string {
 	return a.styles.FilterLine.Width(a.width).Render(line + hint)
 }
 
-func (a *App) statusBarView() string {
+func (a *App) bottomChromeView() string {
 	var hint string
 	switch a.tab {
 	case tabInventory:
@@ -115,24 +145,6 @@ func (a *App) statusBarView() string {
 	case tabSettings:
 		hint = HintSettings
 	}
-	theme := a.styles.Dim.Render("theme: " + Themes[a.themeIdx].Name)
 	left := a.styles.Dim.Render(hint)
-	right := theme
-	gap := max(0, a.width-lipgloss.Width(left)-lipgloss.Width(right))
-	return a.styles.StatusBar.Width(a.width).Render(left + strings.Repeat(" ", gap) + right)
+	return a.styles.StatusBar.Width(a.width).Render(left)
 }
-
-// func (a *App) inventoryFilterLine() string {
-// 	return a.filterLineView()
-// }
-
-// func max(a, b int) int {
-// 	if a > b {
-// 		return a
-// 	}
-// 	return b
-// }
-
-// func formatCount(n int, noun string) string {
-// 	return fmt.Sprintf("%d %s", n, noun)
-// }

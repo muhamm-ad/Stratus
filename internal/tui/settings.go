@@ -90,7 +90,7 @@ func (m *settingsModel) renderSettings(w int, head, cliHead string, cliRows []st
 func row(s Styles, selected bool, label, value string) string {
 	cur := "  "
 	if selected {
-		cur = s.Accent.Render("▸ ")
+		cur = s.Cursor.Render("▸ ")
 	}
 	return cur + s.Text.Render(label+": ") + s.Dim.Render(value)
 }

@@ -11,7 +11,7 @@ type KeyMap struct {
 	// global
 	Search, Cmd, Logs, Theme, Help, Quit key.Binding
 	// inventory
-	Mark, MarkAll, Connect, Stop          key.Binding
+	Mark, MarkAll, Connect, Start, Stop          key.Binding
 	FilterProv, FilterState, FilterRegion key.Binding
 	SortKey, SortDir, ClearFilters        key.Binding
 	Reconnect, Refresh                    key.Binding
@@ -37,10 +37,11 @@ func DefaultKeys() KeyMap {
 		Theme:        key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "theme")),
 		Help:         key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
 		Quit:         key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
-		Mark:         key.NewBinding(key.WithKeys(" "), key.WithHelp("space", "mark")),
+		Mark:         key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "mark")),
 		MarkAll:      key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "mark all/none")),
 		Connect:      key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "connect")),
-		Stop:         key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "stop")),
+		Start:        key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "start")),
+		Stop:         key.NewBinding(key.WithKeys("ctrl+s"), key.WithHelp("ctrl+s", "stop")),
 		FilterProv:   key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "provider")),
 		FilterState:  key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "state")),
 		FilterRegion: key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "region")),
@@ -55,10 +56,10 @@ func DefaultKeys() KeyMap {
 
 // Contextual hint strings, taken verbatim from the mockup.
 const (
-	HintInventory = "j/k move · ⏎ detail · space mark · c connect · S stop · / filter · o sort · : cmd · ? help"
-	HintSessions  = "j/k move · ⏎ jump to vm · x close · : cmd · ? help"
-	HintAudit     = "j/k move · / filter · : cmd · ? help"
-	HintSettings  = "j/k move · ⏎ toggle/cycle · : cmd · ? help"
+	HintInventory = "⏎ detail · s mark · c connect · ctrl+r start · ctrl+s stop · / filter · o sort · : cmd · ? help"
+	HintSessions  = "⏎ jump to vm · x close · : cmd · ? help"
+	HintAudit     = "/ filter · : cmd · ? help"
+	HintSettings  = "⏎ toggle/cycle · : cmd · ? help"
 )
 
 // ShortHelp and FullHelp satisfy bubbles/v2/help's KeyMap interface, so
@@ -71,7 +72,7 @@ func (k KeyMap) ShortHelp() []key.Binding {
 func (k KeyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Tab1, k.Tab2, k.Tab3, k.Tab4, k.Up, k.Down, k.Top, k.Bottom},
-		{k.Enter, k.Mark, k.MarkAll, k.Connect, k.Stop, k.Search,
+		{k.Enter, k.Mark, k.MarkAll, k.Connect, k.Start, k.Stop, k.Search,
 			k.SortKey, k.SortDir, k.FilterProv, k.FilterState, k.FilterRegion, k.ClearFilters, k.Refresh},
 		{k.CloseSess},
 		{k.Cmd, k.Logs, k.Theme, k.Help, k.Reconnect, k.Quit},

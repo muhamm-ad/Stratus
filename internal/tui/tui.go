@@ -34,6 +34,7 @@ const (
 	overlayPalette
 	overlayHelp
 	overlayConfirmQuit
+	overlayVMDetail
 )
 
 // App is the root Bubble Tea model. It owns the chrome and delegates to per-tab
@@ -105,7 +106,7 @@ func (a *App) setTheme(themeIdx int) {
 	a.themeIdx = themeIdx
 	a.styles = NewStyles(Themes[themeIdx])
 	// a.login.applyStyles(a.styles)
-	a.inv.applyStyles(a.styles)
+	a.inv.SetStyles(a.styles)
 	a.audit.applyStyles(a.styles)
 	a.sess.applyStyles(a.styles)
 	// a.settings.applyStyles(a.styles)
@@ -262,6 +263,13 @@ func (a *App) composeOverlay(background string) string {
 		fg = a.help.View(a.styles, a.keys)
 	case overlayConfirmQuit:
 		fg = a.confirmQuitView()
+	case overlayVMDetail:
+		vm, ok := a.inv.selectedVM()
+		if !ok {
+			a.overlay = overlayNone
+			return background
+		}
+		fg = a.inv.detailView(vm)
 	default:
 		return background
 	}
@@ -290,7 +298,7 @@ func (a *App) confirmQuitView() string {
 	return a.styles.ModalBox.Render(title + "\n\n" + body + "\n\n" + footer)
 }
 
-// appView assembles header + filter line + banners + active tab + status bar
+// appView assembles top chrome + banners + active tab + bottom chrome
 // (+ optional log pane), using lipgloss.JoinVertical.
 func (a *App) appView() string {
 	// contentHeight() depends on more than window size (active tab, showLogs,
@@ -299,7 +307,7 @@ func (a *App) appView() string {
 	// converted sub-models' cached table/list sizes stale.
 	a.propagateSize()
 
-	header := a.headerView()
+	topChrome := a.topChromeView()
 	var mid string
 	switch a.tab {
 	case tabInventory:
@@ -311,10 +319,10 @@ func (a *App) appView() string {
 	case tabSettings:
 		mid = a.settings.View(a.width, a.contentHeight(), a.themeIdx)
 	}
-	parts := []string{header}
-	if a.tab != tabSettings {
-		parts = append(parts, a.filterLineView())
-	}
+	parts := []string{topChrome}
+	// if a.tab != tabSettings {
+	// 	parts = append(parts, a.filterLineView())
+	// }
 	for _, b := range a.banners {
 		parts = append(parts, a.styles.ErrorBanner.Width(a.width).Render(b))
 	}
@@ -322,6 +330,6 @@ func (a *App) appView() string {
 	if a.showLogs {
 		parts = append(parts, a.logs.View(a.styles, a.width))
 	}
-	parts = append(parts, a.statusBarView())
+	parts = append(parts, a.bottomChromeView())
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }

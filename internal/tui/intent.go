@@ -8,8 +8,10 @@ const (
 	intentNone intentKind = iota
 	intentConnect
 	intentStop
+	intentStart
 	intentRefresh
 	intentReconnect
+	intentShowDetail
 )
 
 type appIntent struct {

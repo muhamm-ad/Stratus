@@ -80,7 +80,7 @@ func (m *sessionsModel) Render(w io.Writer, l list.Model, index int, item list.I
 	}
 	cur := "  "
 	if index == l.Index() {
-		cur = m.styles.Accent.Render("▸ ")
+		cur = m.styles.Cursor.Render("▸ ")
 	}
 	fmt.Fprintf(w, "%s%s · %s · %s · opened %s",
 		cur, sess.Target, sess.Provider, sess.Method, sess.Opened.Format(time.Kitchen))

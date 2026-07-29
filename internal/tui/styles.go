@@ -20,7 +20,7 @@ type Styles struct {
 	StatusBar                              lipgloss.Style
 	FilterLine                             lipgloss.Style
 	Box                                    lipgloss.Style // rounded border, surface bg (login/overlays)
-	Cursor                                 lipgloss.Style // ▸ cursor row bg (surface2)
+	Cursor                                 lipgloss.Style // ▸ cursor (accent)
 	Marked                                 lipgloss.Style // warn-tinted marked row
 	ErrorBanner                            lipgloss.Style
 	OverlayBox                             lipgloss.Style
@@ -31,22 +31,22 @@ type Styles struct {
 
 func NewStyles(th Theme) Styles {
 	base := lipgloss.NewStyle().Foreground(th.Text)
-	tabFG := th.Bg
-	if _, ok := th.Bg.(lipgloss.NoColor); ok {
-		tabFG = lipgloss.Black
-	}
 	return Styles{
-		th:          th,
-		App:         lipgloss.NewStyle().Background(th.Bg).Foreground(th.Text),
-		Header:      lipgloss.NewStyle().Background(th.Surface).Foreground(th.Text),
-		TabActive:   lipgloss.NewStyle().Background(th.Accent).Foreground(tabFG).Bold(true).Padding(0, 1),
-		TabInactive: lipgloss.NewStyle().Foreground(th.Dim).Padding(0, 1),
+		th:     th,
+		App:    lipgloss.NewStyle().Background(th.Bg).Foreground(th.Text),
+		Header: lipgloss.NewStyle(),
+		// Border-based tabs (see chrome.go's tabBorderWithBottom): the active
+		// tab's bottom edge is open so it visually merges into the row below,
+		// while inactive tabs sit on a flowing "┴" connector — bold + shape
+		// carry the active/inactive distinction even on NoColor themes.
+		TabActive:   lipgloss.NewStyle().Border(tabActiveBorder, true).BorderForeground(th.Accent).Foreground(th.Accent).Bold(true).Padding(0, 1),
+		TabInactive: lipgloss.NewStyle().Border(tabInactiveBorder, true).BorderForeground(th.Border).Foreground(th.Dim).Padding(0, 1),
 		Title:       lipgloss.NewStyle().Foreground(th.Accent).Bold(true),
 		SectionHead: lipgloss.NewStyle().Foreground(th.Dim).Bold(true), // callers upper-case the text
 		StatusBar:   lipgloss.NewStyle().Background(th.Surface).Foreground(th.Dim),
 		FilterLine:  lipgloss.NewStyle().Foreground(th.Dim),
 		Box:         lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(th.Border).Background(th.Surface).Padding(1, 3),
-		Cursor:      lipgloss.NewStyle().Background(th.Surface2),
+		Cursor:      lipgloss.NewStyle().Foreground(th.Accent).Bold(true),
 		Marked:      lipgloss.NewStyle().Background(blend(th.Warn, th.Bg)),
 		ErrorBanner: lipgloss.NewStyle().Foreground(th.Err).Background(blend(th.Err, th.Bg)),
 		OverlayBox:  lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(th.Accent).Background(th.Surface).Padding(1, 2),

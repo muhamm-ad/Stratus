@@ -80,7 +80,7 @@ func (m *loginModel) View(w, h int) string {
 		for i, idpID := range idpIDs {
 			cur := "  "
 			if i == m.cursor {
-				cur = m.styles.Accent.Render("▸ ")
+				cur = m.styles.Cursor.Render("▸ ")
 			}
 			name := m.styles.Text.Bold(true).Render(string(idpID))
 			// desc := s.Dim.Render(" — " + idp.Description)

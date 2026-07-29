@@ -114,10 +114,14 @@ func (a *App) handleIntent(intent appIntent, cmd tea.Cmd) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, a.connectCmd(intent.targets)...)
 	case intentStop:
 		cmds = append(cmds, a.stopCmd(intent.targets)...)
+	case intentStart:
+		cmds = append(cmds, a.startCmd(intent.targets)...)
 	case intentRefresh:
 		cmds = append(cmds,
 			syncProviderCmds(a.svc, false)...,
 		)
+	case intentShowDetail:
+		a.overlay = overlayVMDetail
 	}
 	if len(cmds) == 0 {
 		return a, nil
@@ -156,11 +160,23 @@ func (a *App) connectCmd(targets []core.VM) []tea.Cmd { // FIXME: Implement this
 }
 
 func (a *App) stopCmd(targets []core.VM) []tea.Cmd { // FIXME: Implement this
+	_ = targets
 	// for _, vm := range targets {
 	// 	_ = a.gw.StopVM(context.Background(), vm.ID)
 	// }
 	// if len(targets) > 0 {
 	// 	a.flash, a.flashKind = fmt.Sprintf("stop requested for %d vm(s)", len(targets)), "warn"
+	// }
+	return []tea.Cmd{flashClearCmd()}
+}
+
+func (a *App) startCmd(targets []core.VM) []tea.Cmd { // FIXME: Implement this
+	_ = targets
+	// for _, vm := range targets {
+	// 	_ = a.gw.StartVM(context.Background(), vm.ID)
+	// }
+	// if len(targets) > 0 {
+	// 	a.flash, a.flashKind = fmt.Sprintf("start requested for %d vm(s)", len(targets)), "ok"
 	// }
 	return []tea.Cmd{flashClearCmd()}
 }
@@ -199,6 +215,10 @@ func (a *App) updateOverlay(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case overlayHelp:
 		if msg.String() == "?" || msg.String() == "enter" {
+			a.overlay = overlayNone
+		}
+	case overlayVMDetail:
+		if msg.String() == "enter" {
 			a.overlay = overlayNone
 		}
 	case overlayConfirmQuit:
@@ -242,7 +262,13 @@ func (a *App) runPaletteCommand(c command) tea.Cmd {
 		a.inv.clearFilters()
 		a.inv.recompute()
 	case "connect":
-		_, cmd := a.handleIntent(appIntent{kind: intentConnect, targets: a.inv.connectTargets()}, nil)
+		_, cmd := a.handleIntent(appIntent{kind: intentConnect, targets: a.inv.selectedVMs()}, nil)
+		return cmd
+	case "start":
+		_, cmd := a.handleIntent(appIntent{kind: intentStart, targets: a.inv.selectedVMs()}, nil)
+		return cmd
+	case "stop":
+		_, cmd := a.handleIntent(appIntent{kind: intentStop, targets: a.inv.selectedVMs()}, nil)
 		return cmd
 	case "refresh":
 		return tea.Batch(
