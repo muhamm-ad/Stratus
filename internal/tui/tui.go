@@ -34,7 +34,6 @@ const (
 	overlayPalette
 	overlayHelp
 	overlayConfirmQuit
-	overlayVMDetail
 )
 
 // App is the root Bubble Tea model. It owns the chrome and delegates to per-tab
@@ -66,7 +65,6 @@ type App struct {
 	flash     string
 	flashKind string // ok|warn|err
 	identity  core.IdentityProvider
-	banners   []string // error banners (e.g. gcp session expired)
 
 	searchMode bool
 	searchBuf  string
@@ -111,6 +109,19 @@ func (a *App) setTheme(themeIdx int) {
 	a.sess.applyStyles(a.styles)
 	// a.settings.applyStyles(a.styles)
 	a.palette.applyStyles(a.styles)
+}
+
+// bannerLines derives one error banner per provider currently in
+// CloudProviderStatusError, in stable CloudProvidersIDs order — so
+// reconnecting a provider actually makes its banner disappear.
+func (a *App) bannerLines() []string {
+	var out []string
+	for _, cp := range a.svc.GetCloudProvidersIDs() {
+		if a.svc.GetCloudProviderStatus(cp) == core.CloudProviderStatusError {
+			out = append(out, "▲ "+string(cp)+": session expired, VMs not loaded — press R to reconnect")
+		}
+	}
+	return out
 }
 
 func (a *App) Init() tea.Cmd {
@@ -169,9 +180,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		for cp, cerr := range msg.cpErrors {
-			provider := string(cp)
-			a.banners = append(a.banners, "▲ "+provider+": connect failed — "+cerr.Error())
-			a.logs.add("WARN", provider+" connect failed: "+cerr.Error())
+			a.logs.add("WARN", string(cp)+" connect failed: "+cerr.Error())
 		}
 
 		cmds = append(cmds, flashClearCmd())
@@ -188,7 +197,6 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case vmsLoadErrMsg:
 		provider_str := string(msg.provider)
 		if errors.Is(msg.err, core.ErrNotAuthenticated) || errors.Is(msg.err, core.ErrExchange) {
-			a.banners = append(a.banners, "▲ "+provider_str+": session expired, VMs not loaded — press R to reconnect")
 			a.logs.add("WARN", provider_str+" token expired")
 		} else {
 			a.logs.add("WARN", provider_str+": "+msg.err.Error())
@@ -220,10 +228,19 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, tea.Batch(cmds...)
 
 	case tokenExpiredMsg:
-		provider := string(msg.provider)
-		a.banners = append(a.banners, "▲ "+provider+": session expired, VMs not loaded — press R to reconnect")
-		a.logs.add("WARN", provider+" token expired")
+		a.logs.add("WARN", string(msg.provider)+" token expired")
 		return a, nil
+
+	case providerReconnectOKMsg:
+		a.flash, a.flashKind = string(msg.provider)+" reconnected", "ok"
+		cmds = append(cmds, flashClearCmd())
+		cmds = append(cmds, syncProviderCmd(a.svc, msg.provider, 0))
+		return a, tea.Batch(cmds...)
+
+	case providerReconnectErrMsg:
+		a.flash, a.flashKind = string(msg.provider)+" reconnect failed: "+msg.err.Error(), "err"
+		a.logs.add("WARN", string(msg.provider)+" reconnect failed: "+msg.err.Error())
+		return a, flashClearCmd()
 	}
 
 	// Delegate ticks (spinner) and component msgs to the active area.
@@ -251,9 +268,6 @@ func (a *App) View() tea.View {
 	return v
 }
 
-// composeOverlay centers the current overlay box over the background using the
-// Lip Gloss v2 compositor. This is the key v2 win: overlays are first-class,
-// so we don't hand-roll the line-by-line slicing overlay hack that v1 needed.
 func (a *App) composeOverlay(background string) string {
 	var fg string
 	switch a.overlay {
@@ -263,13 +277,6 @@ func (a *App) composeOverlay(background string) string {
 		fg = a.help.View(a.styles, a.keys)
 	case overlayConfirmQuit:
 		fg = a.confirmQuitView()
-	case overlayVMDetail:
-		vm, ok := a.inv.selectedVM()
-		if !ok {
-			a.overlay = overlayNone
-			return background
-		}
-		fg = a.inv.detailView(vm)
 	default:
 		return background
 	}
@@ -298,8 +305,6 @@ func (a *App) confirmQuitView() string {
 	return a.styles.ModalBox.Render(title + "\n\n" + body + "\n\n" + footer)
 }
 
-// appView assembles top chrome + banners + active tab + bottom chrome
-// (+ optional log pane), using lipgloss.JoinVertical.
 func (a *App) appView() string {
 	// contentHeight() depends on more than window size (active tab, showLogs,
 	// banner count), so re-propagate on every render rather than only on
@@ -323,7 +328,7 @@ func (a *App) appView() string {
 	// if a.tab != tabSettings {
 	// 	parts = append(parts, a.filterLineView())
 	// }
-	for _, b := range a.banners {
+	for _, b := range a.bannerLines() {
 		parts = append(parts, a.styles.ErrorBanner.Width(a.width).Render(b))
 	}
 	parts = append(parts, mid)

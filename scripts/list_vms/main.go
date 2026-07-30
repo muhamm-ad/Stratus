@@ -57,7 +57,7 @@ func main() {
 		fmt.Println("  └────────────────────────────────────────")
 		fmt.Println()
 	}
-	if svc.IdentityUsesDeviceFlow(chosen) {
+	if svc.UsesIdentityUsesDeviceFlow(chosen) {
 		step("starting device flow — follow the instructions below")
 	} else {
 		step("opening your browser — complete the sign-in there…")
@@ -71,7 +71,7 @@ func main() {
 	if !svc.IsAuthenticated() {
 		fail("service reports not authenticated after login")
 	}
-	ok("authenticated as identity %q", svc.ActiveIdentityProviderID())
+	ok("authenticated as identity %q", svc.GetActiveIdentityProviderID())
 
 	if info, uerr := idp.UserInfo(ctx); uerr != nil {
 		warn("UserInfo: %v", uerr)
@@ -85,7 +85,7 @@ func main() {
 	}
 
 	// 4) Report cloud connect results from LoginWith, then list VMs.
-	cloudIDs := svc.CloudProvidersIDs()
+	cloudIDs := svc.GetCloudProvidersIDs()
 	if len(cloudIDs) == 0 {
 		fail("no cloud providers registered")
 	}
@@ -137,7 +137,7 @@ func selectIdentityProvider(svc *service.Service, idpIDs []core.IdentityProvider
 	fmt.Println("\nSelect an identity provider:")
 	for i, id := range idpIDs {
 		hint := ""
-		if svc.IdentityUsesDeviceFlow(id) {
+		if svc.UsesIdentityUsesDeviceFlow(id) {
 			hint = "  — device flow"
 		}
 		fmt.Printf("  [%d] %s%s\n", i+1, id, hint)

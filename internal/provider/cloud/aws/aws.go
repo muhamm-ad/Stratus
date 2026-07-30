@@ -3,7 +3,8 @@ package aws
 import (
 	"context"
 	"fmt"
-	
+	"time"
+
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -32,6 +33,9 @@ func (r idTokenRetriever) GetIdentityToken() ([]byte, error) {
 
 const ProviderID core.CloudProviderID = "aws"
 
+// useMockListVMs routes ListVMs to MockListVMs for UI testing.
+var useMockListVMs = true
+
 // AWSProvider federates the OIDC id_token to AWS via STS
 // AssumeRoleWithWebIdentity, using the SDK's built-in web-identity provider
 // (handles caching + refresh).
@@ -40,6 +44,7 @@ type AWSProvider struct {
 	awsCfg awssdk.Config
 	creds  awssdk.Credentials
 	ok     bool
+	status core.CloudProviderStatus
 }
 
 func NewAWSProvider(cfg Config) (*AWSProvider, error) {
@@ -50,12 +55,24 @@ func NewAWSProvider(cfg Config) (*AWSProvider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("aws: config: %w", err)
 	}
-	return &AWSProvider{cfg: cfg, awsCfg: awsCfg}, nil
+	return &AWSProvider{
+		cfg:    cfg,
+		awsCfg: awsCfg,
+		status: core.CloudProviderStatusUnauthenticated,
+	}, nil
 }
 
 func (p *AWSProvider) ID() core.CloudProviderID { return ProviderID }
 
+func (p *AWSProvider) GetStatus() core.CloudProviderStatus {
+	if p.status == core.CloudProviderStatusAuthenticated && !p.IsAuthenticated() {
+		return core.CloudProviderStatusError
+	}
+	return p.status
+}
+
 func (p *AWSProvider) Authenticate(ctx context.Context, idp core.IdentityProvider) error {
+	p.status = core.CloudProviderStatusAuthenticating
 	provider := stscreds.NewWebIdentityRoleProvider(
 		sts.NewFromConfig(p.awsCfg),
 		p.cfg.RoleArn,
@@ -63,6 +80,8 @@ func (p *AWSProvider) Authenticate(ctx context.Context, idp core.IdentityProvide
 	)
 	creds, err := provider.Retrieve(ctx)
 	if err != nil {
+		p.ok = false
+		p.status = core.CloudProviderStatusError
 		return fmt.Errorf("%w: aws AssumeRoleWithWebIdentity: %v", core.ErrExchange, err)
 	}
 	p.creds = creds
@@ -72,14 +91,65 @@ func (p *AWSProvider) Authenticate(ctx context.Context, idp core.IdentityProvide
 		creds.SessionToken,
 	)
 	p.ok = true
+	p.status = core.CloudProviderStatusAuthenticated
 	return nil
 }
 
 func (p *AWSProvider) IsAuthenticated() bool           { return p.ok && !p.creds.Expired() }
 func (p *AWSProvider) Credentials() awssdk.Credentials { return p.creds }
 
+// MockListVMs returns a fixed set for UI testing.
+func (p *AWSProvider) MockListVMs(ctx context.Context) ([]core.VM, error) {
+	region := core.VMRegion(p.cfg.Region)
+	now := time.Now()
+	return []core.VM{
+		{
+			ID: "i-0abc123def4567890", Name: "dev-stratus-linux-1", State: core.StateRunning,
+			Provider: ProviderID, Tags: map[string]string{"Name": "dev-stratus-linux-1", "environment": "dev"},
+			Region: region, Type: core.VMType("t3.micro"), Platform: core.PlatformLinux, OSUser: "ec2-user",
+			PrivateIP: "10.0.1.10", PublicIP: "3.92.195.172", LaunchTime: now.Add(-24 * time.Hour),
+		},
+		{
+			ID: "i-0bcd234ef5678901a", Name: "dev-stratus-windows-1", State: core.StateRunning,
+			Provider: ProviderID, Tags: map[string]string{"Name": "dev-stratus-windows-1", "environment": "dev"},
+			Region: region, Type: core.VMType("t3.small"), Platform: core.PlatformWindows, OSUser: "Administrator",
+			PrivateIP: "10.0.1.11", PublicIP: "13.221.124.118", LaunchTime: now.Add(-48 * time.Hour),
+		},
+		{
+			ID: "i-0cde345fg6789012b", Name: "staging-api-1", State: core.StateStopped,
+			Provider: ProviderID, Tags: map[string]string{"Name": "staging-api-1", "environment": "staging"},
+			Region: region, Type: core.VMType("t3.medium"), Platform: core.PlatformLinux, OSUser: "ec2-user",
+			PrivateIP: "10.0.2.20", LaunchTime: now.Add(-72 * time.Hour),
+		},
+		{
+			ID: "i-0def456gh7890123c", Name: "staging-worker-1", State: core.StateRunning,
+			Provider: ProviderID, Tags: map[string]string{"Name": "staging-worker-1", "environment": "staging"},
+			Region: region, Type: core.VMType("t3.large"), Platform: core.PlatformLinux, OSUser: "ubuntu",
+			PrivateIP: "10.0.2.21", PublicIP: "54.10.20.30", LaunchTime: now.Add(-96 * time.Hour),
+		},
+		{
+			ID: "i-0efg567hi8901234d", Name: "prod-db-1", State: core.StateRunning,
+			Provider: ProviderID, Tags: map[string]string{"Name": "prod-db-1", "environment": "prod"},
+			Region: region, Type: core.VMType("m5.large"), Platform: core.PlatformLinux, OSUser: "ec2-user",
+			PrivateIP: "10.0.3.30", LaunchTime: now.Add(-168 * time.Hour),
+		},
+		{
+			ID: "i-0fgh678ij9012345e", Name: "prod-bastion-1", State: core.StateStopped,
+			Provider: ProviderID, Tags: map[string]string{"Name": "prod-bastion-1", "environment": "prod"},
+			Region: region, Type: core.VMType("t3.nano"), Platform: core.PlatformLinux, OSUser: "ec2-user",
+			PrivateIP: "10.0.3.31", PublicIP: "18.200.1.50", LaunchTime: now.Add(-200 * time.Hour),
+		},
+	}, nil
+}
+
 func (p *AWSProvider) ListVMs(ctx context.Context) ([]core.VM, error) {
+	// Temporary: use mock data for UI testing. Flip to false to hit AWS.
+	if useMockListVMs {
+		return p.MockListVMs(ctx)
+	}
+
 	if !p.IsAuthenticated() {
+		p.status = core.CloudProviderStatusError
 		return nil, core.ErrNotAuthenticated
 	}
 
@@ -177,6 +247,7 @@ func (p *AWSProvider) Connect(ctx context.Context, req core.ConnectRequest) (cor
 func (p *AWSProvider) Logout(ctx context.Context) error {
 	p.creds, p.ok = awssdk.Credentials{}, false
 	p.awsCfg.Credentials = awssdk.AnonymousCredentials{}
+	p.status = core.CloudProviderStatusUnauthenticated
 	return nil
 }
 
@@ -191,3 +262,4 @@ func (p *AWSProvider) Logout(ctx context.Context) error {
 // 	}
 // 	return core.Account{}, fmt.Errorf("aws: error getting account from role ARN")
 // }
+

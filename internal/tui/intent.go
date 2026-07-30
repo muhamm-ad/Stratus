@@ -11,7 +11,6 @@ const (
 	intentStart
 	intentRefresh
 	intentReconnect
-	intentShowDetail
 )
 
 type appIntent struct {

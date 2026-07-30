@@ -36,6 +36,13 @@ func (r *Registry) Get(id CloudProviderID) (CloudProvider, bool) {
 	return c, ok
 }
 
+// GetAll returns all the connectors in the registry.
+func (r *Registry) GetAll() map[CloudProviderID]CloudProvider {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.m
+}
+
 // IDs returns the registered provider IDs in a stable, sorted order.
 func (r *Registry) IDs() []CloudProviderID {
 	r.mu.RLock()

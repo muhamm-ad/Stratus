@@ -1,13 +1,14 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 	"sync"
 	"time"
 
-	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/table"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/muhamm-ad/stratus/internal/core"
 	"github.com/muhamm-ad/stratus/internal/service"
 )
 
@@ -17,103 +18,133 @@ type AuditEntry struct {
 	Success                    bool
 }
 
-type auditItem AuditEntry
-
-func (i auditItem) FilterValue() string { return i.User + " " + i.VM + " " + i.Provider + " " + i.Method }
-
-func auditItems(entries []AuditEntry) []list.Item {
-	items := make([]list.Item, len(entries))
-	for i, e := range entries {
-		items[i] = auditItem(e)
-	}
-	return items
-}
-
 type auditModel struct {
 	svc    *service.Service
 	styles Styles
-	list   list.Model
+	tbl    table.Model
 
-	mu     sync.Mutex
-	audits []AuditEntry
+	width, height int
+
+	mu              sync.Mutex
+	audits          []AuditEntry // last-synced snapshot, change-detected against getAudits()
+	filteredEntries []AuditEntry
+	query           string
 }
 
 func newAuditModel(svc *service.Service, s Styles) auditModel {
-	// DefaultDelegate is only used for height/pagination math — rows render in View.
-	d := list.NewDefaultDelegate()
-	d.ShowDescription = false
-	d.SetSpacing(0)
-
-	l := list.New(nil, d, 0, 0)
-	l.SetShowTitle(false)
-	l.SetShowStatusBar(false)
-	l.SetShowHelp(false)
-	l.SetShowPagination(true)
-	l.SetFilteringEnabled(true)
-	// list.Model's default Quit ("q"/"esc") would otherwise fire once a
-	// keypress falls through to this tab, since nothing else intercepts esc here.
-	l.DisableQuitKeybindings()
-	return auditModel{svc: svc, styles: s, list: l}
+	t := table.New(
+		table.WithColumns(auditColumns(80)),
+		table.WithKeyMap(vimTableKeyMap()),
+		table.WithFocused(true),
+		table.WithStyles(setTableStyles(s)),
+	)
+	return auditModel{svc: svc, styles: s, tbl: t}
 }
 
-func (m *auditModel) applyStyles(s Styles) { m.styles = s }
+// auditColumns sizes the VM column responsively, mirroring the mockup's
+// grid-template-columns: fixed timestamp/user/provider/method/result
+// columns, VM takes whatever width remains.
+func auditColumns(w int) []table.Column {
+	const timestampW, userW, providerW, methodW, resultW = 17, 10, 9, 9, 10
+	vmW := w - (timestampW + userW + providerW + methodW + resultW)
+	if vmW < 12 {
+		vmW = 12
+	}
+	return []table.Column{
+		{Title: "TIMESTAMP", Width: timestampW},
+		{Title: "USER", Width: userW},
+		{Title: "VM", Width: vmW},
+		{Title: "PROVIDER", Width: providerW},
+		{Title: "METHOD", Width: methodW},
+		{Title: "RESULT", Width: resultW},
+	}
+}
+
+func (m *auditModel) applyStyles(s Styles) {
+	m.styles = s
+	m.tbl.SetStyles(setTableStyles(s))
+	m.syncTableRows()
+}
 
 func (m *auditModel) Update(msg tea.KeyPressMsg) tea.Cmd {
-	var cmds []tea.Cmd
-	// Only resync items (and thus re-run the filter) when the underlying data
-	// actually changed — SetItems every keystroke would clobber in-progress filtering.
 	if fresh := m.getAudits(); len(fresh) != len(m.audits) {
 		m.audits = fresh
-		if cmd := m.list.SetItems(auditItems(m.audits)); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
+		m.recompute()
 	}
 	var cmd tea.Cmd
-	m.list, cmd = m.list.Update(msg)
-	if cmd != nil {
-		cmds = append(cmds, cmd)
-	}
-	return tea.Batch(cmds...)
+	m.tbl, cmd = m.tbl.Update(msg)
+	m.syncTableRows()
+	return cmd
 }
 
-// SetSize reserves 2 lines for the hand-rolled header (+ blank line) which
-// sits outside list.Model's own layout accounting.
+// recompute re-derives filteredEntries from audits via m.query. Nothing
+// wires a key to set m.query yet (see app_keys.go's Search case, which only
+// arms searchMode for the inventory tab today) — this machinery exists so
+// audit filtering doesn't structurally regress versus the list.Model it
+// replaces once that gap is closed.
+func (m *auditModel) recompute() {
+	m.filteredEntries = m.filteredEntries[:0]
+	q := strings.ToLower(m.query)
+	for _, e := range m.audits {
+		if q != "" {
+			hay := strings.ToLower(e.User + " " + e.VM + " " + e.Provider + " " + e.Method)
+			if !strings.Contains(hay, q) {
+				continue
+			}
+		}
+		m.filteredEntries = append(m.filteredEntries, e)
+	}
+	m.syncTableRows()
+}
+
+func (m *auditModel) syncTableRows() {
+	rows := make([]table.Row, len(m.filteredEntries))
+	for i, e := range m.filteredEntries {
+		rows[i] = auditToRow(m.styles, e, i == m.tbl.Cursor())
+	}
+	m.tbl.SetRows(rows)
+}
+
+// auditToRow mirrors inventory.go's vmToRow: cells lose their explicit
+// color when the row is selected, deferring to table.Styles.Selected's
+// highlight instead of clashing with it.
+func auditToRow(s Styles, e AuditEntry, selected bool) table.Row {
+	ts := e.When.Format("Jan 2 15:04")
+	prov := e.Provider
+	method := e.Method
+	result := "✓ success"
+	resultStyle := s.OK
+	if !e.Success {
+		result, resultStyle = "✗ failure", s.Err
+	}
+	if !selected {
+		ts = s.Dim.Render(ts)
+		prov = lipgloss.NewStyle().Foreground(ProviderColor(core.CloudProviderID(e.Provider))).Render(prov)
+		method = s.Dim.Render(method)
+		result = resultStyle.Render(result)
+	}
+	return table.Row{ts, e.User, e.VM, prov, method, result}
+}
+
+// SetSize resizes the table and re-derives the VM column's responsive width.
 func (m *auditModel) SetSize(w, h int) {
-	m.list.SetSize(w, max(1, h-2))
+	m.width, m.height = w, h
+	m.tbl.SetColumns(auditColumns(w))
+	m.tbl.SetWidth(w)
+	if h < 1 {
+		h = 1
+	}
+	m.tbl.SetHeight(h)
 }
 
 func (m *auditModel) View() string {
-	s := m.styles
-	head := s.SectionHead.Render("AUDIT LOG · coming soon")
-	if len(m.list.Items()) == 0 {
-		return head + "\n\n" + s.Dim.Render("no audit entries yet")
+	if len(m.audits) == 0 {
+		return m.styles.Dim.Render("no audit entries yet")
 	}
-
-	var rows []string
-	if m.list.SettingFilter() {
-		rows = append(rows, m.list.FilterInput.View(), "")
+	if len(m.filteredEntries) == 0 {
+		return m.styles.Dim.Render("no entries match your search")
 	}
-
-	items := m.list.VisibleItems()
-	start, end := m.list.Paginator.GetSliceBounds(len(items))
-	for i, item := range items[start:end] {
-		e := item.(auditItem)
-		cur := "  "
-		if start+i == m.list.Index() {
-			cur = s.Cursor.Render("▸ ")
-		}
-		okGlyph := s.OK.Render("✓")
-		if !e.Success {
-			okGlyph = s.Err.Render("✗")
-		}
-		rows = append(rows, fmt.Sprintf("%s%s %s · %s · %s · %s · %s",
-			cur, okGlyph, e.When.Format("Jan 2 15:04"), e.User, e.VM, e.Provider, e.Method))
-	}
-
-	if m.list.Paginator.TotalPages > 1 {
-		rows = append(rows, "", m.list.Paginator.View())
-	}
-	return head + "\n\n" + strings.Join(rows, "\n")
+	return m.tbl.View()
 }
 
 func (m *auditModel) getAudits() []AuditEntry {

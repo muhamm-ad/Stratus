@@ -57,15 +57,15 @@ func (s *Service) IdentityProviders() map[core.IdentityProviderID]core.IdentityP
 }
 
 // ActiveIdentity returns the name of the signed-in identity provider, or "".
-func (s *Service) ActiveIdentityProviderID() core.IdentityProviderID { return s.activeIdentityID }
+func (s *Service) GetActiveIdentityProviderID() core.IdentityProviderID { return s.activeIdentityID }
 
-func (s *Service) ActiveIdentityProvider() core.IdentityProvider {
+func (s *Service) GetActiveIdentityProvider() core.IdentityProvider {
 	return s.idps[s.activeIdentityID]
 }
 
-// IdentityUsesDeviceFlow reports whether the named IdP is configured for RFC
+// UsesIdentityUsesDeviceFlow reports whether the named IdP is configured for RFC
 // 8628 device flow instead of the default browser+loopback flow.
-func (s *Service) IdentityUsesDeviceFlow(id core.IdentityProviderID) bool {
+func (s *Service) UsesIdentityUsesDeviceFlow(id core.IdentityProviderID) bool {
 	idp, ok := s.idps[id]
 	if !ok {
 		return false
@@ -93,7 +93,7 @@ func (s *Service) LoginWith(ctx context.Context, id core.IdentityProviderID, onC
 	s.activeIdentityID = id
 
 	cpErrors := make(map[core.CloudProviderID]error)
-	for _, cpID := range s.CloudProvidersIDs() {
+	for _, cpID := range s.GetCloudProvidersIDs() {
 		if err := s.authenticateCloudProvider(ctx, cpID); err != nil {
 			cpErrors[cpID] = err
 		}
@@ -139,8 +139,22 @@ func (s *Service) activeIdentityProvider() (core.IdentityProvider, error) {
 	return s.idps[s.activeIdentityID], nil
 }
 
-// CloudProvidersIDs lists the registered cloud-provider IDs.
-func (s *Service) CloudProvidersIDs() []core.CloudProviderID { return s.registry.IDs() }
+// GetCloudProvidersIDs lists the registered cloud-provider IDs.
+func (s *Service) GetCloudProvidersIDs() []core.CloudProviderID {
+	return s.registry.IDs()
+}
+
+func (s *Service) GetCloudProviders() map[core.CloudProviderID]core.CloudProvider {
+	return s.registry.GetAll()
+}
+
+func (s *Service) GetCloudProviderStatus(id core.CloudProviderID) core.CloudProviderStatus {
+	cp, ok := s.registry.Get(id)
+	if !ok {
+		return core.CloudProviderStatusUnknown
+	}
+	return cp.GetStatus()
+}
 
 // ProviderUsable reports whether a provider can be used with the currently
 // active identity. Azure, for instance, is unusable unless the active identity
@@ -174,10 +188,14 @@ func (s *Service) authenticateCloudProvider(ctx context.Context, id core.CloudPr
 	if con, ok := cp.(core.CloudProviderConstraint); ok && !con.AcceptsIdentityIssuer(core.IssuerOf(idp)) {
 		return fmt.Errorf("service: %q requires a Microsoft Entra identity (active identity %q cannot obtain its credentials)", id, s.activeIdentityID)
 	}
-	if cp.IsAuthenticated() {
+	if cp.IsAuthenticated() && cp.GetStatus() != core.CloudProviderStatusError {
 		return nil
 	}
 	return cp.Authenticate(ctx, idp)
+}
+
+func (s *Service) ReconnectProvider(ctx context.Context, id core.CloudProviderID) error {
+	return s.authenticateCloudProvider(ctx, id)
 }
 
 // ListVMs returns connectable VMs for one account on a provider. (Phase 3.)

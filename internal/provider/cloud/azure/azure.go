@@ -17,6 +17,9 @@ import (
 
 const ProviderID core.CloudProviderID = "azure"
 
+// useMockListVMs routes ListVMs to MockListVMs for UI testing.
+var useMockListVMs = true
+
 // AzureProvider acquires an ARM-scoped token from the ACTIVE identity's refresh
 // token (delegated to x/oauth2 inside the auth.Session). This preserves the
 // single sign-on: no second browser, no separate Azure login. ARM only accepts
@@ -25,6 +28,7 @@ type AzureProvider struct {
 	cfg      Config
 	armToken string
 	ok       bool
+	status   core.CloudProviderStatus
 
 	mu sync.Mutex
 }
@@ -33,18 +37,36 @@ func NewAzureProvider(cfg Config) (*AzureProvider, error) {
 	if cfg.ARMScope == "" {
 		cfg.ARMScope = DefaultARMScope
 	}
-	return &AzureProvider{cfg: cfg}, nil
+	return &AzureProvider{cfg: cfg, status: core.CloudProviderStatusUnauthenticated}, nil
 }
 
 func (p *AzureProvider) ID() core.CloudProviderID { return ProviderID }
 
+func (p *AzureProvider) GetStatus() core.CloudProviderStatus {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.status == core.CloudProviderStatusAuthenticated && !p.ok {
+		return core.CloudProviderStatusError
+	}
+	return p.status
+}
+
 func (p *AzureProvider) Authenticate(ctx context.Context, idp core.IdentityProvider) error {
+	p.mu.Lock()
+	p.status = core.CloudProviderStatusAuthenticating
+	p.mu.Unlock()
+
 	tok, err := idp.AccessToken(ctx, p.cfg.ARMScope)
 	if err != nil {
+		p.mu.Lock()
+		p.ok = false
+		p.status = core.CloudProviderStatusError
+		p.mu.Unlock()
 		return fmt.Errorf("%w: azure ARM token: %v", core.ErrExchange, err)
 	}
 	p.mu.Lock()
 	p.armToken, p.ok = tok, true
+	p.status = core.CloudProviderStatusAuthenticated
 	p.mu.Unlock()
 	return nil
 }
@@ -67,8 +89,52 @@ func (p *AzureProvider) AcceptsIssuer(issuer string) bool {
 		strings.Contains(issuer, "sts.windows.net")
 }
 
+// MockListVMs returns a fixed set for UI testing.
+func (p *AzureProvider) MockListVMs(ctx context.Context) ([]core.VM, error) {
+	const sub = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/"
+	now := time.Now()
+	return []core.VM{
+		{
+			ID: sub + "dev-stratus-l-1", Name: "dev-stratus-l-1", State: core.StateRunning,
+			Provider: ProviderID, Tags: map[string]string{"environment": "dev"},
+			Region: core.VMRegion("eastus"), Type: core.VMType("Standard_B1s"),
+			Platform: core.PlatformLinux, OSUser: "azureuser",
+			PrivateIP: "10.0.0.4", PublicIP: "20.1.2.3", LaunchTime: now.Add(-24 * time.Hour),
+		},
+		{
+			ID: sub + "dev-stratus-w-1", Name: "dev-stratus-w-1", State: core.StateRunning,
+			Provider: ProviderID, Tags: map[string]string{"environment": "dev"},
+			Region: core.VMRegion("eastus"), Type: core.VMType("Standard_B2s"),
+			Platform: core.PlatformWindows, OSUser: "azureuser",
+			PrivateIP: "10.0.0.5", PublicIP: "20.1.2.4", LaunchTime: now.Add(-48 * time.Hour),
+		},
+		{
+			ID: sub + "staging-api-1", Name: "staging-api-1", State: core.StateStopped,
+			Provider: ProviderID, Tags: map[string]string{"environment": "staging"},
+			Region: core.VMRegion("westus2"), Type: core.VMType("Standard_D2s_v3"),
+			Platform: core.PlatformLinux, OSUser: "azureuser",
+			PrivateIP: "10.1.0.10", LaunchTime: now.Add(-72 * time.Hour),
+		},
+		{
+			ID: sub + "prod-web-1", Name: "prod-web-1", State: core.StateRunning,
+			Provider: ProviderID, Tags: map[string]string{"environment": "prod"},
+			Region: core.VMRegion("eastus"), Type: core.VMType("Standard_B1ms"),
+			Platform: core.PlatformLinux, OSUser: "azureuser",
+			PrivateIP: "10.2.0.20", PublicIP: "40.10.20.30", LaunchTime: now.Add(-120 * time.Hour),
+		},
+	}, nil
+}
+
 func (p *AzureProvider) ListVMs(ctx context.Context) ([]core.VM, error) {
+	// Temporary: use mock data for UI testing. Flip to false to hit Azure.
+	if useMockListVMs {
+		return p.MockListVMs(ctx)
+	}
+
 	if !p.IsAuthenticated() {
+		p.mu.Lock()
+		p.status = core.CloudProviderStatusError
+		p.mu.Unlock()
 		return nil, core.ErrNotAuthenticated
 	}
 
@@ -133,6 +199,7 @@ func (p *AzureProvider) Connect(ctx context.Context, req core.ConnectRequest) (c
 func (p *AzureProvider) Logout(ctx context.Context) error {
 	p.mu.Lock()
 	p.armToken, p.ok = "", false
+	p.status = core.CloudProviderStatusUnauthenticated
 	p.mu.Unlock()
 	return nil
 }

@@ -56,7 +56,7 @@ func DefaultKeys() KeyMap {
 
 // Contextual hint strings, taken verbatim from the mockup.
 const (
-	HintInventory = "⏎ detail · s mark · c connect · ctrl+r start · ctrl+s stop · / filter · o sort · : cmd · ? help"
+	HintInventory = "⏎ detail · s mark · c connect · / filter · o sort · : cmd · ? help"
 	HintSessions  = "⏎ jump to vm · x close · : cmd · ? help"
 	HintAudit     = "/ filter · : cmd · ? help"
 	HintSettings  = "⏎ toggle/cycle · : cmd · ? help"

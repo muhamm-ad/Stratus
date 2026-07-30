@@ -53,7 +53,7 @@ func (m *loginModel) Update(msg tea.KeyPressMsg, send func(tea.Msg), s Styles) (
 		case "enter":
 			idpID := idpIDs[m.cursor]
 			m.selected = string(idpID)
-			m.useDevice = m.svc.IdentityUsesDeviceFlow(idpID)
+			m.useDevice = m.svc.UsesIdentityUsesDeviceFlow(idpID)
 			m.deviceCode = core.DeviceCode{}
 			m.err = nil
 			m.step = stepWaiting

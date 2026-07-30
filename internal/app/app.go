@@ -58,7 +58,7 @@ func (a *App) LoginWith(identityProviderID string) error {
 
 // ActiveIdentityProviderID returns the signed-in identity provider ID, or "".
 func (a *App) ActiveIdentityProviderID() string {
-	return string(a.svc.ActiveIdentityProviderID())
+	return string(a.svc.GetActiveIdentityProviderID())
 }
 
 // Login is a convenience for the single-provider case.
@@ -72,7 +72,7 @@ func (a *App) Logout() error         { return a.svc.Logout(a.ctx) }
 
 // CloudProviders lists registered cloud-provider IDs (e.g. "aws","azure","gcp").
 func (a *App) CloudProviders() []string {
-	ids := a.svc.CloudProvidersIDs()
+	ids := a.svc.GetCloudProvidersIDs()
 	out := make([]string, len(ids))
 	for i, id := range ids {
 		out[i] = string(id)

@@ -9,6 +9,16 @@ import "context"
 // CloudProviderID identifies a cloud provider.
 type CloudProviderID string
 
+type CloudProviderStatus int
+
+const (
+	CloudProviderStatusUnknown CloudProviderStatus = iota
+	CloudProviderStatusAuthenticated
+	CloudProviderStatusAuthenticating
+	CloudProviderStatusUnauthenticated
+	CloudProviderStatusError
+)
+
 // CloudProvider is the contract implemented by every provider. The UI and
 // orchestration layers depend only on this interface, so adding a new cloud
 // means adding a new implementation, not touching callers.
@@ -31,4 +41,6 @@ type CloudProvider interface {
 
 	// Logout clears tokens and any cached credentials.
 	Logout(ctx context.Context) error
+
+	GetStatus() CloudProviderStatus
 }

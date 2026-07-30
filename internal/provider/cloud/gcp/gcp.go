@@ -28,16 +28,27 @@ func (s subjectTokenSupplier) SubjectToken(ctx context.Context, _ externalaccoun
 const ProviderID core.CloudProviderID = "gcp"
 
 type GCPProvider struct {
-	cfg   Config
-	token string
-	ok    bool
+	cfg    Config
+	token  string
+	ok     bool
+	status core.CloudProviderStatus
 }
 
-func NewGCPProvider(cfg Config) (*GCPProvider, error) { return &GCPProvider{cfg: cfg}, nil }
+func NewGCPProvider(cfg Config) (*GCPProvider, error) {
+	return &GCPProvider{cfg: cfg, status: core.CloudProviderStatusUnauthenticated}, nil
+}
 
 func (p *GCPProvider) ID() core.CloudProviderID { return ProviderID }
 
+func (p *GCPProvider) GetStatus() core.CloudProviderStatus {
+	if p.status == core.CloudProviderStatusAuthenticated && !p.IsAuthenticated() {
+		return core.CloudProviderStatusError
+	}
+	return p.status
+}
+
 func (p *GCPProvider) Authenticate(ctx context.Context, idp core.IdentityProvider) error {
+	p.status = core.CloudProviderStatusAuthenticating
 	ts, err := externalaccount.NewTokenSource(ctx, externalaccount.Config{
 		Audience:                 p.cfg.WorkforceAudience,
 		SubjectTokenType:         "urn:ietf:params:oauth:token-type:jwt",
@@ -47,13 +58,18 @@ func (p *GCPProvider) Authenticate(ctx context.Context, idp core.IdentityProvide
 		WorkforcePoolUserProject: p.cfg.WorkforcePoolUserProject,
 	})
 	if err != nil {
+		p.ok = false
+		p.status = core.CloudProviderStatusError
 		return fmt.Errorf("%w: gcp externalaccount: %v", core.ErrExchange, err)
 	}
 	tok, err := ts.Token()
 	if err != nil {
+		p.ok = false
+		p.status = core.CloudProviderStatusError
 		return fmt.Errorf("%w: gcp STS token-exchange: %v", core.ErrExchange, err)
 	}
 	p.token, p.ok = tok.AccessToken, true
+	p.status = core.CloudProviderStatusAuthenticated
 	return nil
 }
 
@@ -62,6 +78,7 @@ func (p *GCPProvider) AccessToken() string   { return p.token }
 
 func (p *GCPProvider) ListVMs(ctx context.Context) ([]core.VM, error) {
 	if !p.IsAuthenticated() {
+		p.status = core.CloudProviderStatusError
 		return nil, core.ErrNotAuthenticated
 	}
 	project := strings.TrimSpace(p.cfg.WorkforcePoolUserProject)
@@ -98,7 +115,11 @@ func (p *GCPProvider) ListVMs(ctx context.Context) ([]core.VM, error) {
 func (p *GCPProvider) Connect(ctx context.Context, req core.ConnectRequest) (core.Session, error) {
 	return nil, core.ErrNotImplemented // Phase 4
 }
-func (p *GCPProvider) Logout(ctx context.Context) error { p.token, p.ok = "", false; return nil }
+func (p *GCPProvider) Logout(ctx context.Context) error {
+	p.token, p.ok = "", false
+	p.status = core.CloudProviderStatusUnauthenticated
+	return nil
+}
 
 func (p *GCPProvider) getAccount() (core.Account, error) {
 	return core.Account{

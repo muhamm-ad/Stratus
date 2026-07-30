@@ -20,6 +20,7 @@ type Styles struct {
 	StatusBar                              lipgloss.Style
 	FilterLine                             lipgloss.Style
 	Box                                    lipgloss.Style // rounded border, surface bg (login/overlays)
+	SidePanel                              lipgloss.Style // left-border-only docked pane (vm detail, sessions)
 	Cursor                                 lipgloss.Style // ▸ cursor (accent)
 	Marked                                 lipgloss.Style // warn-tinted marked row
 	ErrorBanner                            lipgloss.Style
@@ -46,6 +47,7 @@ func NewStyles(th Theme) Styles {
 		StatusBar:   lipgloss.NewStyle().Background(th.Surface).Foreground(th.Dim),
 		FilterLine:  lipgloss.NewStyle().Foreground(th.Dim),
 		Box:         lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(th.Border).Background(th.Surface).Padding(1, 3),
+		SidePanel:   lipgloss.NewStyle().Border(lipgloss.NormalBorder(), false, false, false, true).BorderForeground(th.Border).Background(th.Surface).Padding(0, 1),
 		Cursor:      lipgloss.NewStyle().Foreground(th.Accent).Bold(true),
 		Marked:      lipgloss.NewStyle().Background(blend(th.Warn, th.Bg)),
 		ErrorBanner: lipgloss.NewStyle().Foreground(th.Err).Background(blend(th.Err, th.Bg)),
