@@ -6,11 +6,16 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/table"
+	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/muhamm-ad/stratus/internal/core"
 	"github.com/muhamm-ad/stratus/internal/service"
 )
+
+// detailPanelWidth is a terminal-column width, not the mockup's 380 CSS
+// pixels — chosen to read well at typical 80-160 col terminal widths.
+const detailPanelWidth = 42
 
 type sortKey int
 
@@ -32,6 +37,9 @@ type inventoryModel struct {
 	tbl           table.Model
 	width, height int
 
+	detailOn bool
+	detailVP viewport.Model
+
 	fProvider core.CloudProviderID
 	fState    core.VMState
 	fRegion   core.VMRegion
@@ -42,25 +50,68 @@ type inventoryModel struct {
 
 func newInventoryModel(svc *service.Service, s Styles) inventoryModel {
 	t := table.New(
-		table.WithColumns([]table.Column{
-			{Title: "", Width: 1}, // ✓
-			{Title: "NAME", Width: 30},
-			{Title: "PROVIDER", Width: 9},
-			{Title: "REGION", Width: 15},
-			{Title: "TYPE", Width: 18},
-			{Title: "STATE", Width: 12},
-		}),
-		table.WithKeyMap(inventoryTableKeyMap()),
+		table.WithColumns(fullTableColumns(80)),
+		table.WithKeyMap(vimTableKeyMap()),
 		table.WithFocused(true),
 		table.WithStyles(setTableStyles(s)),
 	)
-	return inventoryModel{svc: svc, styles: s, marked: map[string]bool{}, tbl: t, sortAsc: true}
+	return inventoryModel{svc: svc, styles: s, marked: map[string]bool{}, tbl: t, detailVP: viewport.New(), sortAsc: true}
 }
 
-// inventoryTableKeyMap mirrors the app's own navigation keys (k/j/g/G) but
+// tableCellPad is the horizontal padding from setTableStyles (Padding(0, 1)
+// on Header and Cell). Bubbles sizes columns by content width only, so this
+// extra must be subtracted or the table overflows the terminal.
+const tableCellPad = 2
+
+const (
+	invColCheck    = 1
+	invColProvider = 9
+	invColRegion   = 15
+	invColType     = 18
+	invColState    = 12
+	invColNameMin  = 12
+)
+
+func flexNameWidth(tableW, nCols, fixedContent int) int {
+	nameW := tableW - fixedContent - nCols*tableCellPad
+	if nameW < invColNameMin {
+		return invColNameMin
+	}
+	return nameW
+}
+
+// fullTableColumns sizes NAME to the leftover width so the table fills the
+// terminal; PROVIDER/REGION/TYPE/STATE stay fixed on the right.
+func fullTableColumns(w int) []table.Column {
+	fixed := invColCheck + invColProvider + invColRegion + invColType + invColState
+	return []table.Column{
+		{Title: "", Width: invColCheck}, // ✓
+		{Title: "NAME", Width: flexNameWidth(w, 6, fixed)},
+		{Title: "PROVIDER", Width: invColProvider},
+		{Title: "REGION", Width: invColRegion},
+		{Title: "TYPE", Width: invColType},
+		{Title: "STATE", Width: invColState},
+	}
+}
+
+// narrowTableColumns drops REGION/TYPE when the detail panel is docked,
+// mirroring the mockup's column-hiding behavior at reduced width. NAME still
+// absorbs leftover space.
+func narrowTableColumns(w int) []table.Column {
+	fixed := invColCheck + invColProvider + invColState
+	return []table.Column{
+		{Title: "", Width: invColCheck}, // ✓
+		{Title: "NAME", Width: flexNameWidth(w, 4, fixed)},
+		{Title: "PROVIDER", Width: invColProvider},
+		{Title: "STATE", Width: invColState},
+	}
+}
+
+// vimTableKeyMap mirrors the app's own navigation keys (k/j/g/G) but
 // strips PageDown/HalfPageDown's default "f"/"space" bindings — those are
-// already claimed by FilterState and other app keys.
-func inventoryTableKeyMap() table.KeyMap {
+// already claimed by FilterState and other app keys. Shared by the
+// inventory and audit tables.
+func vimTableKeyMap() table.KeyMap {
 	return table.KeyMap{
 		LineUp:       key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k/↑", "up")),
 		LineDown:     key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j/↓", "down")),
@@ -68,8 +119,8 @@ func inventoryTableKeyMap() table.KeyMap {
 		PageDown:     key.NewBinding(key.WithKeys("pgdown"), key.WithHelp("pgdn", "page down")),
 		HalfPageUp:   key.NewBinding(key.WithKeys("ctrl+u"), key.WithHelp("ctrl+u", "½ page up")),
 		HalfPageDown: key.NewBinding(key.WithKeys("ctrl+d"), key.WithHelp("ctrl+d", "½ page down")),
-		// "g" never actually reaches the table: app_keys.go intercepts it for the
-		// "gg" double-tap gesture before dispatch reaches here. Bound for symmetry only.
+		// "g"/"G"/"home"/"end" are handled on the app Nav layer (gg + jump)
+		// before dispatch reaches the table. Bound for symmetry only.
 		GotoTop:    key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "top")),
 		GotoBottom: key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "bottom")),
 	}
@@ -176,71 +227,101 @@ func (m inventoryModel) vmToRow(vm core.VM, selected bool) table.Row {
 			check = m.styles.OK.Render("✓")
 		}
 	}
-	dot := "●"
+	cloudProvider := string(vm.Provider)
 	if !selected {
-		dot = lipgloss.NewStyle().Foreground(ProviderColor(vm.Provider)).Render("●")
+		cloudProvider = cloudProviderGlyph(vm.Provider, selected)
 	}
-	return table.Row{
-		check,
-		dot + " " + vm.Name,
-		string(vm.Provider),
-		string(vm.Region),
-		string(vm.Type),
-		stateGlyph(m.styles, vm.State, selected),
+	name := string(vm.Name)
+	state := stateGlyph(m.styles, vm.State, selected)
+	if m.detailOn {
+		return table.Row{check, name, cloudProvider, state}
 	}
+	return table.Row{check, name, cloudProvider, string(vm.Region), string(vm.Type), state}
 }
 
 func (m *inventoryModel) Update(msg tea.KeyPressMsg, k KeyMap, s Styles) (inventoryModel, tea.Cmd, appIntent) {
 	m.SetStyles(s)
-	switch {
-	case key.Matches(msg, k.Mark):
+	act := k.Inventory.Match(msg)
+	if act == ActionNone {
+		switch nav := k.Nav.Match(msg); nav {
+		case ActionSelect, ActionBack, ActionJumpTop, ActionJumpBottom:
+			act = nav
+		}
+	}
+	if act != ActionNone {
+		return m.Handle(act)
+	}
+	// Movement / paging stays on the table keymap so j/k/pgup match Nav
+	// without a second dispatch table. Mouse later calls Handle directly.
+	m.tbl, _ = m.tbl.Update(msg)
+	m.syncTableRows()
+	return *m, nil, appIntent{}
+}
+
+func (m *inventoryModel) Handle(act Action) (inventoryModel, tea.Cmd, appIntent) {
+	switch act {
+	case ActionMark:
 		if len(m.filteredVM) > 0 {
 			id := m.filteredVM[m.tbl.Cursor()].ID
 			m.marked[id] = !m.marked[id]
 		}
 		m.syncTableRows()
-	case key.Matches(msg, k.MarkAll):
+	case ActionMarkAll:
 		m.toggleMarkAll()
 		m.syncTableRows()
-	case key.Matches(msg, k.Enter):
+	case ActionSelect:
 		if _, ok := m.selectedVM(); ok {
-			return *m, nil, appIntent{kind: intentShowDetail}
+			m.detailOn = !m.detailOn
+			m.applyTableLayout()
 		}
-	case key.Matches(msg, k.Connect):
+	case ActionBack:
+		if m.detailOn {
+			m.detailOn = false
+			m.applyTableLayout()
+		}
+	case ActionJumpTop:
+		m.tbl.GotoTop()
+		m.syncTableRows()
+	case ActionJumpBottom:
+		m.tbl.GotoBottom()
+		m.syncTableRows()
+	case ActionConnect:
 		return *m, nil, appIntent{kind: intentConnect, targets: m.selectedVMs()}
-	case key.Matches(msg, k.Start):
+	case ActionStart:
 		return *m, nil, appIntent{kind: intentStart, targets: m.selectedVMs()}
-	case key.Matches(msg, k.Stop):
+	case ActionStop:
 		return *m, nil, appIntent{kind: intentStop, targets: m.selectedVMs()}
-	case key.Matches(msg, k.FilterProv):
-		providersIds := append(m.svc.CloudProvidersIDs(), core.CloudProviderID(""))
+	case ActionFilterProvider:
+		providersIds := append(m.svc.GetCloudProvidersIDs(), core.CloudProviderID(""))
 		m.fProvider = cycle(m.fProvider, providersIds...)
 		m.recompute()
-	case key.Matches(msg, k.FilterState):
+	case ActionFilterState:
 		states := []core.VMState{core.StateRunning, core.StateStopped, core.StateStarting, core.StateStopping, core.StateUnknown, ""}
 		m.fState = cycle(m.fState, states...)
 		m.recompute()
-	case key.Matches(msg, k.FilterRegion):
+	case ActionFilterRegion:
 		m.cycleRegion()
 		m.recompute()
-	case key.Matches(msg, k.ClearFilters):
+	case ActionClearFilters:
 		m.clearFilters()
 		m.recompute()
-	case key.Matches(msg, k.SortKey):
+	case ActionSortKey:
 		m.sortK = (m.sortK + 1) % 6
 		m.recompute()
-	case key.Matches(msg, k.SortDir):
+	case ActionSortDir:
 		m.sortAsc = !m.sortAsc
 		m.recompute()
-	case key.Matches(msg, k.Refresh):
+	case ActionRefresh:
 		return *m, nil, appIntent{kind: intentRefresh}
-	default:
-		// Every remaining key (movement, paging) is safe to forward unconditionally:
-		// inventoryTableKeyMap above guarantees no app-reserved letter is bound here.
-		m.tbl, _ = m.tbl.Update(msg)
-		m.syncTableRows()
 	}
 	return *m, nil, appIntent{}
+}
+
+func cloudProviderGlyph(cp core.CloudProviderID, selected bool) string {
+	if !selected {
+		return lipgloss.NewStyle().Foreground(ProviderColor(cp)).Render(string(cp))
+	}
+	return string(cp)
 }
 
 // stateGlyph renders the exact glyphs from the mockup with theme colors.
@@ -351,19 +432,43 @@ func (m *inventoryModel) clearFilters() {
 	m.query = ""
 }
 
-// SetSize stores the available area and resizes the table.
+// SetSize stores the available area and resizes the table (and the detail
+// panel, if docked).
 func (m *inventoryModel) SetSize(w, h int) {
 	m.width, m.height = w, h
-	m.applyTableHeight()
+	m.applyTableLayout()
 }
 
-func (m *inventoryModel) applyTableHeight() {
+// tableWidth is the full width normally, or the width remaining once the
+// docked detail panel's column is subtracted.
+func (m *inventoryModel) tableWidth() int {
+	if !m.detailOn {
+		return m.width
+	}
+	w := m.width - detailPanelWidth
+	if w < 20 {
+		w = 20
+	}
+	return w
+}
+
+// applyTableLayout resizes the table for the current width/height and swaps
+// its column set (full vs. narrowed) to match whether the detail panel is
+// docked — called on both SetSize and detailOn toggles.
+func (m *inventoryModel) applyTableLayout() {
 	h := m.height
 	if h < 1 {
 		h = 1
 	}
-	m.tbl.SetWidth(m.width)
+	w := m.tableWidth()
+	if m.detailOn {
+		m.tbl.SetColumns(narrowTableColumns(w))
+	} else {
+		m.tbl.SetColumns(fullTableColumns(w))
+	}
+	m.tbl.SetWidth(w)
 	m.tbl.SetHeight(h)
+	m.syncTableRows()
 }
 
 func (m *inventoryModel) View() string {
@@ -374,7 +479,11 @@ func (m *inventoryModel) View() string {
 		}
 		return lipgloss.Place(m.width, m.height, lipgloss.Left, lipgloss.Top, msg)
 	}
-	return lipgloss.NewStyle().Width(m.width).Height(m.height).Render(m.tbl.View())
+	tableView := lipgloss.NewStyle().Width(m.tableWidth()).Height(m.height).Render(m.tbl.View())
+	if vm, ok := m.selectedVM(); m.detailOn && ok {
+		return lipgloss.JoinHorizontal(lipgloss.Top, tableView, m.detailPanelView(vm))
+	}
+	return tableView
 }
 
 // selectedVM returns the VM under the table cursor, if any.
@@ -386,12 +495,18 @@ func (m *inventoryModel) selectedVM() (core.VM, bool) {
 	return m.filteredVM[c], true
 }
 
-// detailView renders the VM detail as a floating modal (App.composeOverlay
-// centers it over the inventory table via the Lip Gloss v2 compositor).
-func (m *inventoryModel) detailView(vm core.VM) string {
-	lines := []string{
-		m.styles.Accent.Bold(true).Render("instance detail"),
-		"",
+// detailPanelView renders the VM detail as a side panel docked to the right
+// of the table (see App.appView / inventoryModel.View), scrolled via a
+// viewport so long tag lists never clip. The mockup's permission
+// (canConnect) and "recent activity" blocks are dropped: core.VM has no
+// permission field and there's no real audit data to source activity from.
+func (m *inventoryModel) detailPanelView(vm core.VM) string {
+	header := lipgloss.JoinVertical(lipgloss.Left,
+		m.styles.Text.Bold(true).Render(vm.Name)+"  "+stateGlyph(m.styles, vm.State, false),
+		m.styles.Dim.Render(vm.ID),
+	)
+
+	fields := []string{
 		m.styles.Text.Render("name:    ") + m.styles.Accent.Render(vm.Name),
 		m.styles.Text.Render("id:      ") + m.styles.Dim.Render(vm.ID),
 		m.styles.Text.Render("provider:") + " " + m.styles.Text.Render(string(vm.Provider)),
@@ -401,8 +516,18 @@ func (m *inventoryModel) detailView(vm core.VM) string {
 		m.styles.Text.Render("ip:      ") + m.styles.Cyan.Render(string(vm.PrivateIP)),
 		m.styles.Text.Render("method:  ") + m.styles.Text.Render("unknown (not implemented yet)"),
 		m.styles.Text.Render("tags:    ") + m.styles.Dim.Render(formatTags(vm.Tags)),
-		"",
-		m.styles.Dim.Render("esc/⏎ close"),
 	}
-	return m.styles.OverlayBox.Width(56).Render(strings.Join(lines, "\n"))
+	footer := m.styles.Dim.Render("esc/⏎ close")
+
+	innerW := detailPanelWidth - 2 // SidePanel's horizontal padding
+	bodyH := m.height - lipgloss.Height(header) - lipgloss.Height(footer) - 2
+	if bodyH < 1 {
+		bodyH = 1
+	}
+	m.detailVP.SetWidth(innerW)
+	m.detailVP.SetHeight(bodyH)
+	m.detailVP.SetContent(strings.Join(fields, "\n"))
+
+	body := lipgloss.JoinVertical(lipgloss.Left, header, "", m.detailVP.View(), footer)
+	return m.styles.SidePanel.Width(detailPanelWidth).Height(m.height).Render(body)
 }

@@ -7,12 +7,14 @@ import (
 	"sync"
 	"time"
 
-	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/muhamm-ad/stratus/internal/core"
 	"github.com/muhamm-ad/stratus/internal/service"
 )
+
+const sessionListWidth = 30
 
 type session struct {
 	ID       string
@@ -46,10 +48,11 @@ func sessionItems(sessions []session) []list.Item {
 }
 
 type sessionsModel struct {
-	svc    *service.Service
-	styles Styles
-	list   list.Model
-	seq    int
+	svc           *service.Service
+	styles        Styles
+	list          list.Model
+	seq           int
+	width, height int
 
 	mu       sync.Mutex
 	sessions []session
@@ -86,11 +89,11 @@ func (m *sessionsModel) Render(w io.Writer, l list.Model, index int, item list.I
 		cur, sess.Target, sess.Provider, sess.Method, sess.Opened.Format(time.Kitchen))
 }
 
-// Update handles CloseSess itself, before ever forwarding to list.Update:
+// Update handles Close itself, before ever forwarding to list.Update:
 // list.Model's default NextPage binding includes "d", which would otherwise
-// collide with CloseSess ("x"/"d").
+// collide with Close ("x"/"d").
 func (m *sessionsModel) Update(msg tea.KeyPressMsg, k KeyMap) tea.Cmd {
-	if key.Matches(msg, k.CloseSess) {
+	if k.Sessions.Match(msg) == ActionCloseSession {
 		if item, ok := m.list.SelectedItem().(sessionItem); ok {
 			_ = m.CloseSession(context.Background(), item.ID)
 		}
@@ -118,18 +121,81 @@ func (m *sessionsModel) applyStyles(s Styles) {
 	// m.list.SetDelegate(*m)
 }
 
-// SetSize reserves 2 lines for the hand-rolled header (+ blank line) which
-// sits outside list.Model's own layout accounting.
+// SetSize splits the available width between the session list and the
+// right-hand detail pane, mirroring the mockup's two-pane layout.
 func (m *sessionsModel) SetSize(w, h int) {
-	m.list.SetSize(w, max(1, h-2))
+	m.width, m.height = w, h
+	m.list.SetSize(m.listWidth(), max(1, h))
+}
+
+func (m *sessionsModel) listWidth() int {
+	w := sessionListWidth
+	if m.width > 0 && w > m.width {
+		w = m.width
+	}
+	return w
+}
+
+func (m *sessionsModel) rightPaneWidth() int {
+	w := m.width - m.listWidth()
+	if w < 1 {
+		w = 1
+	}
+	return w
+}
+
+// selected returns the session under the list cursor, if any.
+func (m *sessionsModel) selected() (session, bool) {
+	item, ok := m.list.SelectedItem().(sessionItem)
+	if !ok {
+		return session{}, false
+	}
+	return session(item), true
 }
 
 func (m *sessionsModel) View() string {
-	head := m.styles.SectionHead.Render("ACTIVE SESSIONS · coming soon")
+	return lipgloss.JoinHorizontal(lipgloss.Top, m.leftPaneView(), m.rightPaneView())
+}
+
+func (m *sessionsModel) leftPaneView() string {
 	if len(m.list.Items()) == 0 {
-		return head + "\n\n" + m.styles.Dim.Render("no active sessions — connect from inventory (c)")
+		msg := m.styles.Dim.Render("no active sessions\nconnect from\ninventory (c)")
+		return lipgloss.Place(m.listWidth(), m.height, lipgloss.Left, lipgloss.Top, msg)
 	}
-	return head + "\n\n" + m.list.View()
+	return lipgloss.NewStyle().Width(m.listWidth()).Height(m.height).Render(m.list.View())
+}
+
+// rightPaneView renders the mockup's terminal-pane chrome for the selected
+// session — VISUAL STUB ONLY. It is not wired to a real pty or
+// tea.ExecProcess (real connect/attach is separate, later work — see the
+// BuildSessionSpec/openSession FIXMEs below). A textinput.Model is
+// deliberately not used here: a component that silently discards keystrokes
+// would be misleading rather than honestly "not implemented yet".
+func (m *sessionsModel) rightPaneView() string {
+	sess, ok := m.selected()
+	if !ok {
+		msg := m.styles.Dim.Render("no session selected")
+		if len(m.list.Items()) == 0 {
+			msg = m.styles.Dim.Render("no active sessions — connect from inventory (c)")
+		}
+		return lipgloss.Place(m.rightPaneWidth(), m.height, lipgloss.Center, lipgloss.Center, msg)
+	}
+
+	dot := m.styles.OK.Render("●")
+	provStyle := lipgloss.NewStyle().Foreground(ProviderColor(core.CloudProviderID(sess.Provider)))
+	left := dot + " " + m.styles.Text.Bold(true).Render(sess.Target) + "  " +
+		provStyle.Render(sess.Provider) + "  " + m.styles.Dim.Render(sess.Method)
+	header := lipgloss.JoinHorizontal(lipgloss.Bottom, left, m.styles.Dim.Render("[x] close"))
+
+	body := lipgloss.JoinVertical(lipgloss.Left,
+		m.styles.Dim.Render("Connecting to "+sess.Target+" via "+sess.Method+"…"),
+		m.styles.Dim.Render("opened "+sess.Opened.Format(time.Kitchen)),
+		"",
+		m.styles.Dim.Render("(visual preview only — not yet wired to a live session)"),
+	)
+
+	content := lipgloss.JoinVertical(lipgloss.Left, header, "", body)
+	return m.styles.SidePanel.Width(m.rightPaneWidth()).Height(m.height).Render(content)
 }
 
 // BuildSessionSpec constructs the native CLI argv for connecting to a VM.

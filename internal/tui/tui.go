@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/muhamm-ad/stratus/internal/core"
 	"github.com/muhamm-ad/stratus/internal/service"
+	"go.dalton.dog/bubbleup/v2"
 )
 
 type screen int
@@ -48,23 +49,22 @@ type App struct {
 	styles        Styles
 	keys          KeyMap
 
-	screen  screen
-	tab     tab
-	overlay overlay
+	screen    screen
+	tab       tab
+	overlay   overlay
+	quitFocus int // 0 = Sign out, 1 = Cancel
 
-	login    loginModel
-	inv      inventoryModel
-	sess     sessionsModel
-	audit    auditModel
-	settings settingsModel
-	palette  paletteModel
-	help     helpModel
-	logs     logPane
-	showLogs bool
+	login      loginModel
+	inv        inventoryModel
+	sess       sessionsModel
+	audit      auditModel
+	settings   settingsModel
+	cmdPalette paletteModel
+	help       helpModel
+	logs       logPane
 
-	flash     string
-	flashKind string // ok|warn|err
-	identity  core.IdentityProvider
+	alert    bubbleup.AlertModel
+	identity core.IdentityProvider
 
 	searchMode bool
 	searchBuf  string
@@ -81,14 +81,20 @@ func New(svc *service.Service) *App {
 		keys:     DefaultKeys(),
 		themeIdx: 0,
 		styles:   NewStyles(th),
+		width:    minAppWidth,
+		height:   minAppHeight,
 		screen:   screenLogin,
+		alert: bubbleup.NewAlertModel(50, false, 3*time.Second).
+			WithMinWidth(20).
+			WithPosition(bubbleup.BottomRightPosition).
+			WithUnicodePrefix(),
 	}
 	a.login = newLoginModel(svc, a.styles)
 	a.inv = newInventoryModel(svc, a.styles)
 	a.sess = newSessionsModel(svc, a.styles)
 	a.audit = newAuditModel(svc, a.styles)
 	a.settings = newSettingsModel(svc, a.styles)
-	a.palette = newPaletteModel(a.styles)
+	a.cmdPalette = newPaletteModel(a.styles)
 	a.help = newHelpModel()
 	a.logs = newLogPane()
 	return a
@@ -108,28 +114,59 @@ func (a *App) setTheme(themeIdx int) {
 	a.audit.applyStyles(a.styles)
 	a.sess.applyStyles(a.styles)
 	// a.settings.applyStyles(a.styles)
-	a.palette.applyStyles(a.styles)
-}
-
-// bannerLines derives one error banner per provider currently in
-// CloudProviderStatusError, in stable CloudProvidersIDs order — so
-// reconnecting a provider actually makes its banner disappear.
-func (a *App) bannerLines() []string {
-	var out []string
-	for _, cp := range a.svc.GetCloudProvidersIDs() {
-		if a.svc.GetCloudProviderStatus(cp) == core.CloudProviderStatusError {
-			out = append(out, "▲ "+string(cp)+": session expired, VMs not loaded — press R to reconnect")
-		}
-	}
-	return out
+	a.cmdPalette.applyStyles(a.styles)
 }
 
 func (a *App) Init() tea.Cmd {
 	// The braille spinner starts ticking immediately for the login/sync UI.
-	return tea.Batch(a.login.spinner.Tick)
+	return tea.Batch(a.login.spinner.Tick, a.alert.Init())
+}
+
+func (a *App) notify(key, message string) tea.Cmd {
+	if a.overlay != overlayNone || a.tooSmall() {
+		return nil
+	}
+	return a.alert.NewAlertCmd(key, message)
+}
+
+func (a *App) log(level, msg string) tea.Cmd {
+	a.logs.add(level, msg)
+	if !a.settings.logAlerts {
+		return nil
+	}
+	switch level {
+	case "WARN":
+		return a.notify(bubbleup.WarnKey, msg)
+	case "ERR", "ERROR":
+		return a.notify(bubbleup.ErrorKey, msg)
+	default:
+		return a.notify(bubbleup.DebugKey, msg)
+	}
+}
+
+func tabName(t tab) string {
+	switch t {
+	case tabInventory:
+		return "inventory"
+	case tabSessions:
+		return "sessions"
+	case tabAudit:
+		return "audit"
+	case tabSettings:
+		return "settings"
+	default:
+		return "unknown"
+	}
 }
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	_, cmd := a.handle(msg)
+	out, alertCmd := a.alert.Update(msg)
+	a.alert = out.(bubbleup.AlertModel)
+	return a, tea.Batch(cmd, alertCmd)
+}
+
+func (a *App) handle(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
@@ -139,28 +176,38 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case tea.KeyPressMsg:
-		if s := msg.String(); s == "ctrl+c" {
+		if a.keys.Global.Match(msg) == ActionForceQuit {
 			return a, tea.Quit
+		}
+		if a.tooSmall() {
+			return a, nil
 		}
 		if a.overlay != overlayNone {
 			return a.updateOverlay(msg)
 		}
 		if a.screen == screenLogin {
-			m, cmd := a.login.Update(msg, a.send, a.styles)
+			prev := a.login.step
+			m, cmd := a.login.Update(msg, a.send, a.styles, a.keys.Nav)
 			a.login = m
+			if prev == stepSelect && m.step == stepWaiting {
+				return a, tea.Batch(cmd, a.log("INFO", "login started via "+m.selected))
+			}
+			if prev == stepWaiting && m.step == stepSelect {
+				return a, tea.Batch(cmd, a.log("INFO", "login cancelled"))
+			}
 			return a, cmd
 		}
 		return a.updateAppKeys(msg)
 
 	case deviceCodeMsg:
 		a.login.deviceCode = core.DeviceCode(msg)
-		return a, nil
+		return a, a.log("INFO", "device code issued for "+a.login.selected)
 
 	case loginResultMsg:
 		if msg.err != nil {
 			a.login.err = msg.err
 			a.login.step = stepSelect
-			return a, nil
+			return a, a.log("ERROR", "login failed: "+msg.err.Error())
 		}
 		a.identity = msg.identityProvider
 		a.screen = screenApp
@@ -168,22 +215,23 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		userInfo, err := a.identity.UserInfo(context.Background())
 		if err != nil {
 			a.loggedUserLabel = a.styles.Dim.Render("unknown")
-			a.flash, a.flashKind = "error: "+err.Error(), "err"
-			// 	return a, flashClearCmd()
+			cmds = append(cmds, a.log("ERROR", "user info: "+err.Error()))
+			cmds = append(cmds, a.notify(bubbleup.ErrorKey, "error: "+err.Error()))
 		} else {
 			userName := userInfo["name"]
 			// userEmail := userInfo["email"]
 			identityProviderId := string(a.identity.ID())
 			// a.loggedUser = a.styles.Dim.Render(userName + " (" + userEmail + ") · " + identityProviderId)
 			a.loggedUserLabel = a.styles.Dim.Render(userName + " via " + identityProviderId)
-			a.flash, a.flashKind = "welcome, "+userName+" — signed in via "+identityProviderId, "ok"
+			cmds = append(cmds, a.log("INFO", "signed in as "+userName+" via "+identityProviderId))
+			cmds = append(cmds, a.notify(bubbleup.InfoKey, "welcome, "+userName+" — signed in via "+identityProviderId))
 		}
 
 		for cp, cerr := range msg.cpErrors {
-			a.logs.add("WARN", string(cp)+" connect failed: "+cerr.Error())
+			cmds = append(cmds, a.log("WARN", string(cp)+" connect failed: "+cerr.Error()))
 		}
 
-		cmds = append(cmds, flashClearCmd())
+		cmds = append(cmds, a.log("INFO", "syncing cloud providers"))
 		cmds = append(cmds, syncProviderCmds(a.svc, false)...)
 		cmds = append(cmds, autoRefreshCmd())
 
@@ -191,56 +239,65 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case vmsLoadedMsg:
 		a.inv.mergeProvider(msg.provider, msg.vms)
-		a.logs.add("INFO", string(msg.provider)+" synced ("+itoa(len(msg.vms))+" VMs)")
-		return a, nil
+		return a, a.log("INFO", string(msg.provider)+" synced ("+itoa(len(msg.vms))+" VMs)")
 
 	case vmsLoadErrMsg:
 		provider_str := string(msg.provider)
 		if errors.Is(msg.err, core.ErrNotAuthenticated) || errors.Is(msg.err, core.ErrExchange) {
-			a.logs.add("WARN", provider_str+" token expired")
-		} else {
-			a.logs.add("WARN", provider_str+": "+msg.err.Error())
+			return a, tea.Batch(
+				a.log("WARN", provider_str+" token expired"),
+				a.notify(bubbleup.ErrorKey, provider_str+": session expired, VMs not loaded — press R to reconnect"),
+			)
 		}
-		return a, nil
+		return a, tea.Batch(
+			a.log("WARN", provider_str+": "+msg.err.Error()),
+			a.notify(bubbleup.ErrorKey, provider_str+": "+msg.err.Error()),
+		)
 
 	case connectErrMsg:
-		a.flash, a.flashKind = "connect failed: "+msg.vm, "err"
-		return a, flashClearCmd()
+		return a, tea.Batch(
+			a.log("ERROR", "connect failed: "+msg.vm),
+			a.notify(bubbleup.ErrorKey, "connect failed: "+msg.vm),
+		)
 
 	case sessionOpenedMsg:
-		return a, execSessionCmd(msg.spec)
+		return a, tea.Batch(
+			a.log("INFO", "session opened: "+msg.spec.VMName),
+			execSessionCmd(msg.spec),
+		)
 
 	case sessionClosedMsg:
 		a.sess.CloseSession(context.Background(), msg.id)
-		a.logs.add("INFO", "session closed: "+msg.id)
-		a.flash, a.flashKind = "session closed", "ok"
-		return a, flashClearCmd()
-
-	case flashClearMsg:
-		a.flash = a.loggedUserLabel
-		return a, nil
+		return a, tea.Batch(
+			a.log("INFO", "session closed: "+msg.id),
+			a.notify(bubbleup.InfoKey, "session closed"),
+		)
 
 	case autoRefreshMsg:
 		if a.settings.autoRefresh {
+			cmds = append(cmds, a.log("INFO", "auto-refresh"))
 			cmds = append(cmds, syncProviderCmds(a.svc, true)...)
 		}
 		cmds = append(cmds, autoRefreshCmd())
 		return a, tea.Batch(cmds...)
 
 	case tokenExpiredMsg:
-		a.logs.add("WARN", string(msg.provider)+" token expired")
-		return a, nil
+		return a, tea.Batch(
+			a.log("WARN", string(msg.provider)+" token expired"),
+			a.notify(bubbleup.ErrorKey, string(msg.provider)+": session expired, VMs not loaded — press R to reconnect"),
+		)
 
 	case providerReconnectOKMsg:
-		a.flash, a.flashKind = string(msg.provider)+" reconnected", "ok"
-		cmds = append(cmds, flashClearCmd())
+		cmds = append(cmds, a.log("INFO", string(msg.provider)+" reconnected"))
+		cmds = append(cmds, a.notify(bubbleup.InfoKey, string(msg.provider)+" reconnected"))
 		cmds = append(cmds, syncProviderCmd(a.svc, msg.provider, 0))
 		return a, tea.Batch(cmds...)
 
 	case providerReconnectErrMsg:
-		a.flash, a.flashKind = string(msg.provider)+" reconnect failed: "+msg.err.Error(), "err"
-		a.logs.add("WARN", string(msg.provider)+" reconnect failed: "+msg.err.Error())
-		return a, flashClearCmd()
+		return a, tea.Batch(
+			a.log("WARN", string(msg.provider)+" reconnect failed: "+msg.err.Error()),
+			a.notify(bubbleup.ErrorKey, string(msg.provider)+" reconnect failed: "+msg.err.Error()),
+		)
 	}
 
 	// Delegate ticks (spinner) and component msgs to the active area.
@@ -256,8 +313,11 @@ func (a *App) View() tea.View {
 	}
 
 	// Overlays via the Lip Gloss v2 compositor (no manual z-index).
-	if a.overlay != overlayNone {
+	// The min-size dialog wins over help/quit/palette.
+	if a.tooSmall() || a.overlay != overlayNone {
 		body = a.composeOverlay(body)
+	} else {
+		body = a.alert.Render(body)
 	}
 
 	v := tea.NewView(body)
@@ -268,51 +328,17 @@ func (a *App) View() tea.View {
 	return v
 }
 
-func (a *App) composeOverlay(background string) string {
-	var fg string
-	switch a.overlay {
-	case overlayPalette:
-		fg = a.palette.View()
-	case overlayHelp:
-		fg = a.help.View(a.styles, a.keys)
-	case overlayConfirmQuit:
-		fg = a.confirmQuitView()
-	default:
-		return background
-	}
-
-	fgW, fgH := lipgloss.Size(fg)
-	x := (a.width - fgW) / 2
-	y := (a.height - fgH) / 2
-	if x < 0 {
-		x = 0
-	}
-	if y < 0 {
-		y = 0
-	}
-
-	comp := lipgloss.NewCompositor(
-		lipgloss.NewLayer(background),        // z 0
-		lipgloss.NewLayer(fg).X(x).Y(y).Z(1), // z 1: floats on top, centered
-	)
-	return lipgloss.NewCanvas(a.width, a.height).Compose(comp).Render()
-}
-
-func (a *App) confirmQuitView() string {
-	title := a.styles.Err.Bold(true).Render("sign out of stratus?")
-	body := a.styles.Dim.Render("you'll need to re-authenticate with your identity\nprovider next time you start stratus.")
-	footer := a.styles.Dim.Render("⏎/y confirm · esc/n cancel")
-	return a.styles.ModalBox.Render(title + "\n\n" + body + "\n\n" + footer)
-}
-
 func (a *App) appView() string {
-	// contentHeight() depends on more than window size (active tab, showLogs,
-	// banner count), so re-propagate on every render rather than only on
-	// WindowSizeMsg — otherwise a tab switch or banner append would leave the
-	// converted sub-models' cached table/list sizes stale.
+	// contentHeight() depends on more than window size (active tab),
+	// so re-propagate on every render rather than only on WindowSizeMsg —
+	// otherwise a tab switch would leave the converted sub-models' cached
+	// table/list sizes stale.
 	a.propagateSize()
 
-	topChrome := a.topChromeView()
+	top := a.topChromeView()
+	bottom := a.bottomChromeView()
+	midH := max(1, a.height-lipgloss.Height(top)-lipgloss.Height(bottom))
+
 	var mid string
 	switch a.tab {
 	case tabInventory:
@@ -322,19 +348,10 @@ func (a *App) appView() string {
 	case tabAudit:
 		mid = a.audit.View()
 	case tabSettings:
-		mid = a.settings.View(a.width, a.contentHeight(), a.themeIdx)
+		mid = a.settings.View(a.width, midH, a.themeIdx)
 	}
-	parts := []string{topChrome}
-	// if a.tab != tabSettings {
-	// 	parts = append(parts, a.filterLineView())
-	// }
-	for _, b := range a.bannerLines() {
-		parts = append(parts, a.styles.ErrorBanner.Width(a.width).Render(b))
-	}
-	parts = append(parts, mid)
-	if a.showLogs {
-		parts = append(parts, a.logs.View(a.styles, a.width))
-	}
-	parts = append(parts, a.bottomChromeView())
-	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+	// Stretch the tab body so the status bar stays on the last terminal row
+	// even when that tab's content is shorter than the window.
+	mid = lipgloss.NewStyle().Width(a.width).Height(midH).MaxHeight(midH).Render(mid)
+	return lipgloss.JoinVertical(lipgloss.Left, top, mid, bottom)
 }

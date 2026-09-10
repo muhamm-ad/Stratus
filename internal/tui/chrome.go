@@ -16,16 +16,7 @@ func (a *App) propagateSize() {
 }
 
 func (a *App) contentHeight() int {
-	h := a.height - lipgloss.Height(a.topChromeView()) - 1
-	if a.tab != tabSettings {
-		h-- // filter line
-	}
-	for range a.bannerLines() {
-		h--
-	}
-	if a.showLogs {
-		h -= logPaneHeight
-	}
+	h := a.height - lipgloss.Height(a.topChromeView()) - lipgloss.Height(a.bottomChromeView())
 	if h < 1 {
 		return 1
 	}
@@ -35,24 +26,8 @@ func (a *App) contentHeight() int {
 func (a *App) topChromeView() string {
 	tabBar := a.tabBarView()
 
-	_right := ""
-	if a.flash != "" {
-		var flashStyle lipgloss.Style
-		switch a.flashKind {
-		case "ok":
-			flashStyle = a.styles.OK
-		case "warn":
-			flashStyle = a.styles.Warn
-		case "err":
-			flashStyle = a.styles.Err
-		default:
-			flashStyle = a.styles.Accent
-		}
-		_right = flashStyle.Render(a.flash)
-	}
-
 	gapWidth := max(0, a.width-lipgloss.Width(tabBar))
-	flash := lipgloss.NewStyle().Inline(true).MaxWidth(gapWidth).Render(_right)
+	identity := lipgloss.NewStyle().Inline(true).MaxWidth(gapWidth).Render(a.loggedUserLabel)
 	gap := a.styles.TabInactive.
 		BorderTop(false).
 		BorderLeft(false).
@@ -62,7 +37,7 @@ func (a *App) topChromeView() string {
 		Align(lipgloss.Right).
 		Render(lipgloss.JoinVertical(
 			lipgloss.Right,
-			flash,
+			identity,
 			a.providerPillsView(),
 		))
 	return a.styles.Header.Width(a.width).Render(
@@ -89,7 +64,7 @@ func (a *App) providerPillsView() string {
 		cpColored := a.styles.Dim.Foreground(ProviderColor(cp)).Render(string(cp))
 		pills = append(pills, cpColored+" "+glyphStyle.Render(glyph))
 	}
-	return "Cloud Providers: " + strings.Join(pills, a.styles.Dim.Render(" · "))
+	return strings.Join(pills, a.styles.Dim.Render(" · "))
 }
 
 func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
@@ -157,23 +132,12 @@ func (a *App) filterLineView() string {
 	if len(chips) > 0 {
 		line = strings.Join(chips, " · ")
 	}
-	hint := a.styles.Dim.Render(" · x clear")
+	hint := a.styles.Dim.Render(" · " + keyed(a.keys.Inventory.ClearFilters, "clear"))
 	return a.styles.FilterLine.Width(a.width).Render(line + hint)
 }
 
 func (a *App) statusLeftView() string {
-	var hint string
-	switch a.tab {
-	case tabInventory:
-		hint = HintInventory
-	case tabSessions:
-		hint = HintSessions
-	case tabAudit:
-		hint = HintAudit
-	case tabSettings:
-		hint = HintSettings
-	}
-	return a.styles.Dim.Render(hint)
+	return a.styles.Dim.Render(a.keys.StatusHint(a.tab))
 }
 
 func (a *App) statusRightView() string {
@@ -189,8 +153,8 @@ func (a *App) statusRightView() string {
 	if busy {
 		sync = "syncing…"
 	}
-	result := fmt.Sprintf("%d/%d vms · %d sess · %s · thm:%s",
-		len(a.inv.filteredVM), len(a.inv.allVM), len(a.sess.sessions), sync, Themes[a.themeIdx].Name)
+	result := fmt.Sprintf("%d/%d vms · %d sess · %s · thm:%s · %d×%d",
+		len(a.inv.filteredVM), len(a.inv.allVM), len(a.sess.sessions), sync, Themes[a.themeIdx].Name, a.width, a.height)
 
 	return a.styles.Dim.Render(result)
 }
@@ -201,5 +165,5 @@ func (a *App) bottomChromeView() string {
 	gapWidth := max(0, a.width-lipgloss.Width(left))
 	rightAligned := lipgloss.NewStyle().Width(gapWidth).Align(lipgloss.Right).Render(right)
 	row := lipgloss.JoinHorizontal(lipgloss.Bottom, left, rightAligned)
-	return a.styles.StatusBar.Width(a.width).Render(row)
+	return a.styles.StatusBar.Width(a.width).Height(1).MaxHeight(1).Render(row)
 }

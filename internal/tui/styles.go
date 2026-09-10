@@ -19,13 +19,19 @@ type Styles struct {
 	SectionHead                            lipgloss.Style // UPPERCASE dim headers
 	StatusBar                              lipgloss.Style
 	FilterLine                             lipgloss.Style
-	Box                                    lipgloss.Style // rounded border, surface bg (login/overlays)
+	Box                                    lipgloss.Style // rounded border, surface bg (login)
 	SidePanel                              lipgloss.Style // left-border-only docked pane (vm detail, sessions)
 	Cursor                                 lipgloss.Style // ▸ cursor (accent)
 	Marked                                 lipgloss.Style // warn-tinted marked row
-	ErrorBanner                            lipgloss.Style
-	OverlayBox                             lipgloss.Style
-	ModalBox                               lipgloss.Style
+	Dialog                                 lipgloss.Style // overlay chrome: rounded accent border, padded
+	DialogTitle                            lipgloss.Style
+	DialogBody                             lipgloss.Style
+	DialogKey                              lipgloss.Style
+	DialogBtn                              lipgloss.Style
+	DialogQuitBtn                          lipgloss.Style
+	HelpCategory                           lipgloss.Style
+	HelpKey                                lipgloss.Style
+	HelpDesc                               lipgloss.Style
 	CodeBox                                lipgloss.Style // big device code box
 	Dim, Accent, OK, Err, Warn, Cyan, Text lipgloss.Style
 }
@@ -50,21 +56,41 @@ func NewStyles(th Theme) Styles {
 		SidePanel:   lipgloss.NewStyle().Border(lipgloss.NormalBorder(), false, false, false, true).BorderForeground(th.Border).Background(th.Surface).Padding(0, 1),
 		Cursor:      lipgloss.NewStyle().Foreground(th.Accent).Bold(true),
 		Marked:      lipgloss.NewStyle().Background(blend(th.Warn, th.Bg)),
-		ErrorBanner: lipgloss.NewStyle().Foreground(th.Err).Background(blend(th.Err, th.Bg)),
-		OverlayBox:  lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(th.Accent).Background(th.Surface).Padding(1, 2),
-		ModalBox:    lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(th.Err).Background(th.Surface).Padding(1, 2),
-		CodeBox:     lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(th.Accent).Foreground(th.Accent).Bold(true).Padding(0, 2),
-		Dim:         lipgloss.NewStyle().Foreground(th.Dim),
-		Accent:      lipgloss.NewStyle().Foreground(th.Accent),
-		OK:          lipgloss.NewStyle().Foreground(th.OK),
-		Err:         lipgloss.NewStyle().Foreground(th.Err),
-		Warn:        lipgloss.NewStyle().Foreground(th.Warn),
-		Cyan:        lipgloss.NewStyle().Foreground(th.Cyan),
-		Text:        base,
+		Dialog: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(th.Accent).
+			Background(th.Surface).
+			Padding(1, 4),
+		DialogTitle: lipgloss.NewStyle().Foreground(th.Text).Bold(true),
+		DialogBody:  lipgloss.NewStyle().Foreground(th.Dim),
+		DialogKey:   lipgloss.NewStyle().Foreground(th.Dim),
+		DialogBtn: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(th.Border).
+			Foreground(th.Text).
+			Padding(0, 2).
+			Height(1),
+		DialogQuitBtn: lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(th.Border).
+			Foreground(th.Err).
+			Padding(0, 2).
+			Height(1),
+		HelpCategory: lipgloss.NewStyle().Foreground(th.Accent).Bold(true),
+		HelpKey:      lipgloss.NewStyle().Foreground(th.Text),
+		HelpDesc:     lipgloss.NewStyle().Foreground(th.Dim),
+		CodeBox:      lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(th.Accent).Foreground(th.Accent).Bold(true).Padding(0, 2),
+		Dim:          lipgloss.NewStyle().Foreground(th.Dim),
+		Accent:       lipgloss.NewStyle().Foreground(th.Accent),
+		OK:           lipgloss.NewStyle().Foreground(th.OK),
+		Err:          lipgloss.NewStyle().Foreground(th.Err),
+		Warn:         lipgloss.NewStyle().Foreground(th.Warn),
+		Cyan:         lipgloss.NewStyle().Foreground(th.Cyan),
+		Text:         base,
 	}
 }
 
-// blend tints a background with a foreground color for marked rows / banners.
+// blend tints a background with a foreground color for marked rows.
 func blend(fg, bg color.Color) color.Color {
 	if _, ok := bg.(lipgloss.NoColor); ok {
 		return lipgloss.BrightBlack

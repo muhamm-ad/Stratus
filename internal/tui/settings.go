@@ -14,10 +14,11 @@ type settingsModel struct {
 	styles      Styles
 	cursor      int
 	autoRefresh bool
+	logAlerts   bool
 }
 
 func newSettingsModel(svc *service.Service, s Styles) settingsModel {
-	return settingsModel{svc: svc, styles: s, autoRefresh: true}
+	return settingsModel{svc: svc, styles: s, autoRefresh: true, logAlerts: true}
 }
 
 type settingsCmd struct{ themeIdx int }
@@ -27,30 +28,37 @@ func (m *settingsModel) applyStyles(s Styles) {
 }
 
 // maxCursor is the last valid row index: one row per provider, then
-// auto-refresh, then theme.
+// auto-refresh, log alerts, then theme.
 func (m *settingsModel) maxCursor() int {
-	return len(m.svc.GetCloudProvidersIDs()) + 1
+	return len(m.svc.GetCloudProvidersIDs()) + 2
 }
 
-func (m *settingsModel) Update(msg tea.KeyPressMsg, themeIdx int, s Styles) (settingsModel, *settingsCmd, appIntent) {
+func (m *settingsModel) Update(msg tea.KeyPressMsg, themeIdx int, s Styles, k KeyMap) (settingsModel, *settingsCmd, appIntent) {
 	m.applyStyles(s)
-	switch msg.String() {
-	case "j", "down":
+	switch k.Nav.Match(msg) {
+	case ActionMoveDown:
 		if m.cursor < m.maxCursor() {
 			m.cursor++
 		}
-	case "k", "up":
+	case ActionMoveUp:
 		if m.cursor > 0 {
 			m.cursor--
 		}
-	case "enter":
+	case ActionJumpTop:
+		m.cursor = 0
+	case ActionJumpBottom:
+		m.cursor = m.maxCursor()
+	case ActionSelect:
 		providerIDs := m.svc.GetCloudProvidersIDs()
+		n := len(providerIDs)
 		switch {
-		case m.cursor < len(providerIDs):
+		case m.cursor < n:
 			return *m, nil, appIntent{kind: intentReconnect, provider: string(providerIDs[m.cursor])}
-		case m.cursor == len(providerIDs):
+		case m.cursor == n:
 			m.autoRefresh = !m.autoRefresh
-		case m.cursor == len(providerIDs)+1:
+		case m.cursor == n+1:
+			m.logAlerts = !m.logAlerts
+		case m.cursor == n+2:
 			idx := (themeIdx + 1) % len(Themes)
 			return *m, &settingsCmd{themeIdx: idx}, appIntent{}
 		}
@@ -75,9 +83,15 @@ func (m *settingsModel) renderSettings(w int, head string, themeIdx int) string 
 	if m.autoRefresh {
 		refresh = "[on] every 60s"
 	}
+	alerts := "[off]"
+	if m.logAlerts {
+		alerts = "[on] toast each log"
+	}
+	n := len(providerIDs)
 	rows = append(rows,
-		settingsRow(m.styles, m.cursor == len(providerIDs), "auto-refresh", refresh, m.styles.Dim, "⏎ toggle"),
-		settingsRow(m.styles, m.cursor == len(providerIDs)+1, "theme", Themes[themeIdx].Name+" (charm · stratus · mono · terminal)", m.styles.Dim, "⏎ cycle"),
+		settingsRow(m.styles, m.cursor == n, "auto-refresh", refresh, m.styles.Dim, "⏎ toggle"),
+		settingsRow(m.styles, m.cursor == n+1, "log alerts", alerts, m.styles.Dim, "⏎ toggle · ctrl+shift+l"),
+		settingsRow(m.styles, m.cursor == n+2, "theme", Themes[themeIdx].Name+" (charm · stratus · mono · terminal)", m.styles.Dim, "⏎ cycle · ctrl+shift+t"),
 	)
 
 	body := head + "\n\n" + strings.Join(rows, "\n")

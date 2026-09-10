@@ -36,21 +36,21 @@ func newLoginModel(svc *service.Service, s Styles) loginModel {
 
 // Not the Update function from the Model interface.
 // Update is called manually when a key is pressed.
-func (m *loginModel) Update(msg tea.KeyPressMsg, send func(tea.Msg), s Styles) (loginModel, tea.Cmd) {
+func (m *loginModel) Update(msg tea.KeyPressMsg, send func(tea.Msg), s Styles, nav NavMap) (loginModel, tea.Cmd) {
 	m.styles = s
 	switch m.step {
 	case stepSelect:
 		idpIDs := m.svc.IdentityProvidersIDs()
-		switch msg.String() {
-		case "j", "down":
+		switch nav.Match(msg) {
+		case ActionMoveDown:
 			if m.cursor < len(idpIDs)-1 {
 				m.cursor++
 			}
-		case "k", "up":
+		case ActionMoveUp:
 			if m.cursor > 0 {
 				m.cursor--
 			}
-		case "enter":
+		case ActionSelect:
 			idpID := idpIDs[m.cursor]
 			m.selected = string(idpID)
 			m.useDevice = m.svc.UsesIdentityUsesDeviceFlow(idpID)
@@ -60,7 +60,7 @@ func (m *loginModel) Update(msg tea.KeyPressMsg, send func(tea.Msg), s Styles) (
 			return *m, tea.Batch(m.spinner.Tick, loginCmd(m.svc, idpID, send))
 		}
 	case stepWaiting:
-		if msg.String() == "esc" {
+		if nav.Match(msg) == ActionBack {
 			m.step = stepSelect
 		}
 	}

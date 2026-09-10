@@ -1,30 +1,21 @@
 package tui
 
-import (
-	"fmt"
-	"strings"
-)
+import "time"
 
-const maxLogLines = 6
+// maxLogEntries caps retained history well beyond a single toast.
+const maxLogEntries = 200
+
+type logEntry struct{ ts, level, msg string }
 
 type logPane struct {
-	lines []string
+	entries []logEntry
 }
 
 func newLogPane() logPane { return logPane{} }
 
 func (l *logPane) add(level, msg string) {
-	line := fmt.Sprintf("%s %s", level, msg)
-	l.lines = append(l.lines, line)
-	if len(l.lines) > maxLogLines {
-		l.lines = l.lines[len(l.lines)-maxLogLines:]
+	l.entries = append(l.entries, logEntry{ts: time.Now().Format("15:04:05"), level: level, msg: msg})
+	if len(l.entries) > maxLogEntries {
+		l.entries = l.entries[len(l.entries)-maxLogEntries:]
 	}
-}
-
-func (l logPane) View(s Styles, w int) string {
-	head := s.SectionHead.Render("LOG")
-	if len(l.lines) == 0 {
-		return s.Dim.Width(w).Render(head + "\n(no events)")
-	}
-	return s.Dim.Width(w).Render(head + "\n" + strings.Join(l.lines, "\n"))
 }

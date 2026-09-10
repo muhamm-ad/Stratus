@@ -31,10 +31,15 @@ type sessionClosedMsg struct {
 	id  string
 	err error
 }
-type flashClearMsg struct{}
 type tokenExpiredMsg struct{ provider core.CloudProviderID }
 type autoRefreshMsg time.Time
 type ggResetMsg struct{}
+
+type providerReconnectOKMsg struct{ provider core.CloudProviderID }
+type providerReconnectErrMsg struct {
+	provider core.CloudProviderID
+	err      error
+}
 
 // ---- commands -------------------------------------------------------------
 
@@ -51,9 +56,20 @@ func loginCmd(svc *service.Service, idpID core.IdentityProviderID, send func(tea
 	}
 }
 
+// syncProviderCmd lists one provider's VMs after an optional delay.
+func syncProviderCmd(svc *service.Service, cp core.CloudProviderID, delay time.Duration) tea.Cmd {
+	return tea.Tick(delay, func(time.Time) tea.Msg {
+		vms, err := svc.ListVMs(context.Background(), cp)
+		if err != nil {
+			return vmsLoadErrMsg{provider: cp, err: err}
+		}
+		return vmsLoadedMsg{provider: cp, vms: vms}
+	})
+}
+
 // syncProviderCmds loads all providers' VMs after a staggered delay
 func syncProviderCmds(svc *service.Service, delay bool) []tea.Cmd {
-	cloudProviders := svc.CloudProvidersIDs()
+	cloudProviders := svc.GetCloudProvidersIDs()
 	cmds := make([]tea.Cmd, len(cloudProviders))
 
 	for i, cp := range cloudProviders {
@@ -61,13 +77,7 @@ func syncProviderCmds(svc *service.Service, delay bool) []tea.Cmd {
 		if delay {
 			d = time.Duration(i+1) * 200 * time.Millisecond
 		}
-		cmds[i] = tea.Tick(d, func(time.Time) tea.Msg {
-			vms, err := svc.ListVMs(context.Background(), cp)
-			if err != nil {
-				return vmsLoadErrMsg{provider: cp, err: err}
-			}
-			return vmsLoadedMsg{provider: cp, vms: vms}
-		})
+		cmds[i] = syncProviderCmd(svc, cp, d)
 	}
 	return cmds
 }
@@ -78,10 +88,6 @@ func execSessionCmd(spec SessionSpec) tea.Cmd {
 	return tea.ExecProcess(c, func(err error) tea.Msg {
 		return sessionClosedMsg{id: spec.SessionID, err: err}
 	})
-}
-
-func flashClearCmd() tea.Cmd {
-	return tea.Tick(3*time.Second, func(time.Time) tea.Msg { return flashClearMsg{} })
 }
 
 func autoRefreshCmd() tea.Cmd {
