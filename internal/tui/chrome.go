@@ -10,13 +10,14 @@ import (
 
 func (a *App) propagateSize() {
 	h := a.contentHeight()
-	a.inv.SetSize(a.width, h)
-	a.audit.SetSize(a.width, h)
-	a.sess.SetSize(a.width, h)
+	w := a.layoutWidth()
+	a.inv.SetSize(w, h)
+	a.audit.SetSize(w, h)
+	a.sess.SetSize(w, h)
 }
 
 func (a *App) contentHeight() int {
-	h := a.height - lipgloss.Height(a.topChromeView()) - lipgloss.Height(a.bottomChromeView())
+	h := a.layoutHeight() - lipgloss.Height(a.topChromeView()) - lipgloss.Height(a.bottomChromeView())
 	if h < 1 {
 		return 1
 	}
@@ -25,8 +26,9 @@ func (a *App) contentHeight() int {
 
 func (a *App) topChromeView() string {
 	tabBar := a.tabBarView()
+	w := a.layoutWidth()
 
-	gapWidth := max(0, a.width-lipgloss.Width(tabBar))
+	gapWidth := max(0, w-lipgloss.Width(tabBar))
 	handle := ""
 	if a.overlay != overlaySidebar {
 		handle = sidebarHandleView(a.styles, false)
@@ -43,10 +45,12 @@ func (a *App) topChromeView() string {
 		underline = lipgloss.JoinHorizontal(lipgloss.Bottom, rule, handle)
 	}
 	gap := lipgloss.JoinVertical(lipgloss.Right, identity, pills, underline)
-	gap = lipgloss.NewStyle().Width(gapWidth).Align(lipgloss.Right).Render(gap)
-	return a.styles.Header.Width(a.width).Render(
-		lipgloss.JoinHorizontal(lipgloss.Bottom, tabBar, gap),
-	)
+	if gapWidth == 0 {
+		return boxNoWrap(a.styles.Header, tabBar, w, max(1, lipgloss.Height(tabBar)))
+	}
+	gap = lipgloss.NewStyle().Width(gapWidth).MaxWidth(gapWidth).MaxHeight(lipgloss.Height(gap)).Align(lipgloss.Right).Render(gap)
+	row := lipgloss.JoinHorizontal(lipgloss.Bottom, tabBar, gap)
+	return boxNoWrap(a.styles.Header, row, w, max(1, lipgloss.Height(row)))
 }
 
 func (a *App) providerPillsView() string {
@@ -137,7 +141,8 @@ func (a *App) filterLineView() string {
 		line = strings.Join(chips, " · ")
 	}
 	hint := a.styles.Dim.Render(" · " + keyed(a.keys.Inventory.ClearFilters, "clear"))
-	return a.styles.FilterLine.Width(a.width).Render(line + hint)
+	w := a.layoutWidth()
+	return boxNoWrap(a.styles.FilterLine, clipLine(line+hint, w), w, 1)
 }
 
 func (a *App) statusLeftView() string {
@@ -167,13 +172,29 @@ func (a *App) statusRightView() string {
 }
 
 func (a *App) bottomChromeView() string {
+	w := a.layoutWidth()
 	left := a.statusLeftView()
 	if a.overlay == overlaySidebar {
-		return a.styles.StatusBar.Width(a.width).Height(1).MaxHeight(1).Render(left)
+		return boxNoWrap(a.styles.StatusBar, clipLine(left, w), w, 1)
 	}
 	right := a.statusRightView()
-	gapWidth := max(0, a.width-lipgloss.Width(left))
-	rightAligned := lipgloss.NewStyle().Width(gapWidth).Align(lipgloss.Right).Render(right)
-	row := lipgloss.JoinHorizontal(lipgloss.Bottom, left, rightAligned)
-	return a.styles.StatusBar.Width(a.width).Height(1).MaxHeight(1).Render(row)
+	row := joinClipRow(left, right, w)
+	return boxNoWrap(a.styles.StatusBar, row, w, 1)
+}
+
+// joinClipRow packs left and right into one w-wide line. Overflow clips the
+// left side first so the right-hand status stays visible.
+func joinClipRow(left, right string, w int) string {
+	if w < 1 {
+		return ""
+	}
+	lw := lipgloss.Width(left)
+	rw := lipgloss.Width(right)
+	if lw+rw <= w {
+		return left + strings.Repeat(" ", w-lw-rw) + right
+	}
+	if rw >= w {
+		return clipLine(right, w)
+	}
+	return clipLine(left, w-rw) + right
 }

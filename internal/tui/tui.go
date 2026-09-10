@@ -46,6 +46,7 @@ type App struct {
 	send func(tea.Msg) // program.Send, injected after NewProgram
 
 	width, height int
+	panX, panY    int // viewport into the min-size layout when the window is smaller
 	themeIdx      int
 	styles        Styles
 	keys          KeyMap
@@ -182,6 +183,7 @@ func (a *App) handle(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		a.width, a.height = msg.Width, msg.Height
+		a.clampPan()
 		a.propagateSize()
 		return a, nil
 
@@ -190,6 +192,7 @@ func (a *App) handle(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Quit
 		}
 		if a.tooSmall() {
+			a.panTooSmall(msg)
 			return a, nil
 		}
 		if a.overlay != overlayNone {
@@ -314,10 +317,42 @@ func (a *App) handle(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return a.delegate(msg)
 }
 
+func (a *App) layoutWidth() int  { return max(a.width, minAppWidth) }
+func (a *App) layoutHeight() int { return max(a.height, minAppHeight) }
+
+func (a *App) clampPan() {
+	a.panX = max(0, min(a.panX, max(0, a.layoutWidth()-max(1, a.width))))
+	a.panY = max(0, min(a.panY, max(0, a.layoutHeight()-max(1, a.height))))
+}
+
+func (a *App) panTooSmall(msg tea.KeyPressMsg) {
+	switch a.keys.Nav.Match(msg) {
+	case ActionMoveUp:
+		a.panY--
+	case ActionMoveDown:
+		a.panY++
+	case ActionPageUp:
+		a.panY -= max(1, a.height-1)
+	case ActionPageDown:
+		a.panY += max(1, a.height-1)
+	case ActionJumpTop:
+		a.panY = 0
+	case ActionJumpBottom:
+		a.panY = a.layoutHeight()
+	}
+	switch msg.Code {
+	case tea.KeyLeft, 'h':
+		a.panX--
+	case tea.KeyRight, 'l':
+		a.panX++
+	}
+	a.clampPan()
+}
+
 func (a *App) View() tea.View {
 	var body string
 	if a.screen == screenLogin {
-		body = a.login.View(a.width, a.height)
+		body = a.login.View(a.layoutWidth(), a.layoutHeight())
 	} else {
 		body = a.appView()
 	}
@@ -325,10 +360,14 @@ func (a *App) View() tea.View {
 	// Overlays via the Lip Gloss v2 compositor (no manual z-index).
 	// The min-size dialog wins over help/quit/palette.
 	if a.tooSmall() || a.overlay != overlayNone {
+		if a.tooSmall() {
+			body = cropBlock(body, a.panX, a.panY, max(1, a.width), max(1, a.height))
+		}
 		body = a.composeOverlay(body)
 	} else if a.screen == screenLogin {
 		body = a.alert.Render(body)
 	}
+	body = cropBlock(body, 0, 0, max(1, a.width), max(1, a.height))
 
 	v := tea.NewView(body)
 	v.AltScreen = true
@@ -350,8 +389,8 @@ func (a *App) appView() string {
 
 	top := a.topChromeView()
 	bottom := a.bottomChromeView()
-	midH := max(1, a.height-lipgloss.Height(top)-lipgloss.Height(bottom))
-	contentW := max(1, a.width)
+	midH := max(1, a.layoutHeight()-lipgloss.Height(top)-lipgloss.Height(bottom))
+	contentW := max(1, a.layoutWidth())
 
 	var mid string
 	switch a.tab {
@@ -365,8 +404,8 @@ func (a *App) appView() string {
 		mid = a.settings.View(contentW, midH, a.themeIdx)
 	}
 	// Stretch the tab body so the status bar stays on the last terminal row
-	// even when that tab's content is shorter than the window.
-	mid = lipgloss.NewStyle().Width(contentW).Height(midH).MaxHeight(midH).Render(mid)
+	// even when that tab's content is shorter than the window. Clip, don't wrap.
+	mid = boxNoWrap(lipgloss.NewStyle(), mid, contentW, midH)
 	upper := lipgloss.JoinVertical(lipgloss.Left, top, mid)
 	if a.tooSmall() || a.overlay != overlayNone {
 		return lipgloss.JoinVertical(lipgloss.Left, upper, bottom)

@@ -95,7 +95,8 @@ func (m *settingsModel) renderSettings(w int, head string, themeIdx int) string 
 	)
 
 	body := head + "\n\n" + strings.Join(rows, "\n")
-	return lipgloss.NewStyle().Width(w).Render(body)
+	h := max(1, lipgloss.Height(body))
+	return padBlock(body, max(1, w), h)
 }
 
 // providerRowInfo maps a provider's live connection state to the row's

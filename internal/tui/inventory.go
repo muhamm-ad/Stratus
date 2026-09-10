@@ -479,7 +479,7 @@ func (m *inventoryModel) View() string {
 		}
 		return lipgloss.Place(m.width, m.height, lipgloss.Left, lipgloss.Top, msg)
 	}
-	tableView := lipgloss.NewStyle().Width(m.tableWidth()).Height(m.height).Render(m.tbl.View())
+	tableView := boxNoWrap(lipgloss.NewStyle(), m.tbl.View(), m.tableWidth(), m.height)
 	if vm, ok := m.selectedVM(); m.detailOn && ok {
 		return lipgloss.JoinHorizontal(lipgloss.Top, tableView, m.detailPanelView(vm))
 	}
@@ -529,5 +529,5 @@ func (m *inventoryModel) detailPanelView(vm core.VM) string {
 	m.detailVP.SetContent(strings.Join(fields, "\n"))
 
 	body := lipgloss.JoinVertical(lipgloss.Left, header, "", m.detailVP.View(), footer)
-	return m.styles.SidePanel.Width(detailPanelWidth).Height(m.height).Render(body)
+	return boxNoWrap(m.styles.SidePanel, body, detailPanelWidth, m.height)
 }

@@ -15,6 +15,12 @@ const (
 	sidebarTabLogs
 )
 
+// sidebarWidth is fixed so the drawer never shrinks (and wraps) on resize.
+const sidebarWidth = 56
+
+// notifIconGap sits between the status glyph and the message.
+const notifIconGap = "  "
+
 type notifEntry struct {
 	ts, key, msg string
 }
@@ -52,14 +58,11 @@ type sidebarModel struct {
 func newSidebarModel() sidebarModel { return sidebarModel{} }
 
 func sidebarHandleView(s Styles, open bool) string {
-	// glyph := "▶"
-	// if open {
-	// 	glyph = "◀"
-	// }
-	// return s.Handle.Render(glyph)
-	return s.Handle.Render("🔔")
-	// return lipgloss.PlaceHorizontal(s.Handle.GetWidth(), lipgloss.Center, s.Handle.Foreground(s.th.Bg).Background(s.th.Accent).Render("🔔"))
-
+	glyph := "◀"
+	if open {
+		glyph = "▶"
+	}
+	return s.Handle.Render(glyph)
 }
 
 func (m *sidebarModel) setTab(t sidebarTab) {
@@ -69,14 +72,12 @@ func (m *sidebarModel) setTab(t sidebarTab) {
 	}
 }
 
-func (m sidebarModel) View(s Styles, k KeyMap, w, h int, logs logPane) string {
+func (m sidebarModel) View(s Styles, k KeyMap, h int, logs logPane) string {
 	h = max(1, h)
-	panelW := min(detailPanelWidth, max(24, w/3))
+	panelW := sidebarWidth
 
-	frameH := s.Sidebar.GetHorizontalFrameSize()
-	frameV := s.Sidebar.GetVerticalFrameSize()
-	innerW := max(8, panelW-frameH)
-	innerH := max(1, h-frameV)
+	innerW := sidebarInnerWidth(s)
+	innerH := max(1, h-s.Sidebar.GetVerticalFrameSize())
 
 	tabs := m.tabRow(s, innerW)
 	footer := sidebarFooter(s, k, innerW)
@@ -104,7 +105,7 @@ func (m sidebarModel) View(s Styles, k KeyMap, w, h int, logs logPane) string {
 	}
 
 	inner := lipgloss.JoinVertical(lipgloss.Left, tabs, body, footer)
-	return s.Sidebar.Width(panelW).Height(h).MaxHeight(h).Render(inner)
+	return boxNoWrap(s.Sidebar, inner, panelW, h)
 }
 
 func (m sidebarModel) tabRow(s Styles, innerW int) string {
@@ -112,14 +113,20 @@ func (m sidebarModel) tabRow(s Styles, innerW int) string {
 	logs := sidebarTabStyle(s, m.tab == sidebarTabLogs).Render("logs [l]")
 	used := lipgloss.Width(notif) + lipgloss.Width(logs)
 	fillW := max(0, innerW-used)
-	fill := s.TabInactive.
-		BorderTop(false).
-		BorderLeft(false).
-		BorderRight(false).
-		Padding(0, 0).
-		Width(fillW).
-		Render("")
-	return lipgloss.JoinHorizontal(lipgloss.Bottom, notif, logs, fill)
+	parts := []string{notif, logs}
+	if fillW > 0 {
+		fill := s.TabInactive.
+			BorderTop(false).
+			BorderLeft(false).
+			BorderRight(false).
+			Padding(0, 0).
+			Width(fillW).
+			MaxWidth(fillW).
+			Render("")
+		parts = append(parts, fill)
+	}
+	row := lipgloss.JoinHorizontal(lipgloss.Bottom, parts...)
+	return padBlock(row, innerW, max(1, lipgloss.Height(row)))
 }
 
 func sidebarFooter(s Styles, k KeyMap, innerW int) string {
@@ -152,13 +159,13 @@ func (m sidebarModel) listBody(s Styles, logs logPane, innerW int) string {
 		}
 		rows := make([]string, 0, len(m.notifs.entries))
 		for _, e := range m.notifs.entries {
-			rows = append(rows, clipLine(formatNotifRow(s, e), innerW))
+			rows = append(rows, formatNotifBlock(s, e, innerW))
 		}
-		return strings.Join(rows, "\n")
+		return strings.Join(rows, "\n\n")
 	}
 }
 
-func formatNotifRow(s Styles, e notifEntry) string {
+func formatNotifBlock(s Styles, e notifEntry, innerW int) string {
 	mark, msgStyle := "●", s.OK
 	switch e.key {
 	case bubbleup.ErrorKey:
@@ -168,7 +175,22 @@ func formatNotifRow(s Styles, e notifEntry) string {
 	case bubbleup.DebugKey:
 		mark, msgStyle = "◆", s.Dim
 	}
-	return s.Dim.Render(e.ts) + " " + msgStyle.Render(mark) + " " + msgStyle.Render(e.msg)
+	prefix := s.Dim.Render(e.ts) + " " + msgStyle.Render(mark) + notifIconGap
+	prefixW := lipgloss.Width(prefix)
+	msgW := max(4, innerW-prefixW)
+	wrapped := lipgloss.Wrap(e.msg, msgW, "")
+	indent := strings.Repeat(" ", prefixW)
+	lines := strings.Split(wrapped, "\n")
+	out := make([]string, len(lines))
+	for i, line := range lines {
+		msg := msgStyle.Render(line)
+		if i == 0 {
+			out[i] = prefix + msg
+			continue
+		}
+		out[i] = indent + msg
+	}
+	return strings.Join(out, "\n")
 }
 
 func formatLogRow(s Styles, e logEntry) string {
@@ -184,22 +206,27 @@ func formatLogRow(s Styles, e logEntry) string {
 	return s.Dim.Render(e.ts) + " " + lvl.Render(e.level) + "  " + s.Text.Render(e.msg)
 }
 
-func (m sidebarModel) listLen(logs logPane) int {
-	if m.tab == sidebarTabLogs {
-		return len(logs.entries)
-	}
-	return len(m.notifs.entries)
+func sidebarInnerWidth(s Styles) int {
+	return max(8, sidebarWidth-s.Sidebar.GetHorizontalFrameSize())
 }
 
 func (m sidebarModel) listHeight(s Styles, h int) int {
-	innerW := 24
-	frameV := s.Sidebar.GetVerticalFrameSize()
-	innerH := max(1, max(1, h)-frameV)
-	return max(1, innerH-lipgloss.Height(m.tabRow(s, innerW))-lipgloss.Height(s.DialogKey.PaddingTop(1).Render("hint")))
+	innerW := sidebarInnerWidth(s)
+	innerH := max(1, max(1, h)-s.Sidebar.GetVerticalFrameSize())
+	footerH := lipgloss.Height(s.DialogKey.PaddingTop(1).Render("hint"))
+	return max(1, innerH-lipgloss.Height(m.tabRow(s, innerW))-footerH)
+}
+
+func (m sidebarModel) bodyLineCount(s Styles, logs logPane) int {
+	body := m.listBody(s, logs, sidebarInnerWidth(s))
+	if body == "" {
+		return 0
+	}
+	return lipgloss.Height(body)
 }
 
 func (m *sidebarModel) maxScroll(s Styles, h int, logs logPane) int {
-	return max(0, m.listLen(logs)-m.listHeight(s, h))
+	return max(0, m.bodyLineCount(s, logs)-m.listHeight(s, h))
 }
 
 func (m *sidebarModel) scrollBy(delta int, s Styles, h int, logs logPane) {

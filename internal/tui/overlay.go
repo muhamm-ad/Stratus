@@ -58,7 +58,7 @@ func (a *App) composeOverlay(background string) string {
 }
 
 func (a *App) composeSidebarOverlay(blurred string) string {
-	panel := opaqueOverlay(a.sidebar.View(a.styles, a.keys, a.width, a.height, a.logs), a.styles.th.Bg)
+	panel := opaqueOverlay(a.sidebar.View(a.styles, a.keys, a.height, a.logs), a.styles.th.Bg)
 	handle := sidebarHandleView(a.styles, true)
 	px, py := sidebarOrigin(panel, a.width)
 	hx := max(0, px-lipgloss.Width(handle))
@@ -80,11 +80,11 @@ func opaqueOverlay(content string, bg color.Color) string {
 	if w < 1 || h < 1 {
 		return content
 	}
-	st := lipgloss.NewStyle().Width(w).Height(h)
+	st := lipgloss.NewStyle()
 	if _, ok := bg.(lipgloss.NoColor); !ok {
 		st = st.Background(bg)
 	}
-	return st.Render(content)
+	return boxNoWrap(st, content, w, h)
 }
 
 func modalOrigin(modal string, w, h int) (x, y int) {
@@ -120,6 +120,7 @@ func (a *App) minSizeDialog() string {
 		current,
 		"",
 		s.DialogKey.Render("Resize the terminal to continue"),
+		s.DialogKey.Render("↑↓←→ or hjkl to pan"),
 	}
 	return s.Dialog.Align(lipgloss.Center).Render(
 		lipgloss.JoinVertical(lipgloss.Center, lines...),

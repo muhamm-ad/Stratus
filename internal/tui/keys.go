@@ -80,7 +80,7 @@ func (k KeyMap) MatchMouse(button tea.MouseButton, hit HitID, t tab) Action {
 
 func (k KeyMap) StatusHint(t tab) string {
 	result := []string{}
-	switch t {
+	// switch t {
 	// case tabInventory:
 	// 	result = strings.Join([]string{
 	// 		keyed(k.Nav.Enter, "detail"),
@@ -89,28 +89,22 @@ func (k KeyMap) StatusHint(t tab) string {
 	// 		keyed(k.Inventory.Search, "filter"),
 	// 		keyed(k.Inventory.SortKey, "sort"),
 	// 	}, " · ")
-	case tabSessions:
-		result = append(result,
-			keyed(k.Nav.Enter, "jump to vm"),
-			keyed(k.Sessions.Close, "close"),
-		)
+	// case tabSessions:
+	// 	result = append(result,
+	// 		keyed(k.Nav.Enter, "jump to vm"),
+	// 	)
 	// case tabAudit:
 	// 	result = strings.Join([]string{
 	// 		keyed(k.Audit.Search, "filter"),
 	// 	}, " · ")
-	case tabSettings:
-		result = append(result,
-			keyed(k.Nav.Enter, "toggle/cycle"),
-		)
-	default:
-		result = []string{}
-	}
+	// default:
+	// 	result = []string{}
+	// }
 
 	globalHints := []string{
 		keyed(k.Global.Palette, "cmd"),
 		keyed(k.Global.Help, "help"),
 		keyed(k.Global.Sidebar, "sidebar"),
-		// keyed(k.Global.Quit, "quit"),
 	}
 	result = append(result, globalHints...)
 

@@ -226,5 +226,5 @@ func (m *paletteModel) View(w, h int) string {
 		"",
 		s.DialogKey.Render(clipLine(footer, innerW)),
 	)
-	return s.Dialog.Width(boxW).MaxHeight(maxH).Render(inner)
+	return boxNoWrap(s.Dialog, inner, boxW, min(maxH, max(1, lipgloss.Height(inner)+s.Dialog.GetVerticalFrameSize())))
 }

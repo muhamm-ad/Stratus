@@ -162,7 +162,7 @@ func (m *sessionsModel) leftPaneView() string {
 		msg := m.styles.Dim.Render("no active sessions\nconnect from\ninventory (c)")
 		return lipgloss.Place(m.listWidth(), m.height, lipgloss.Left, lipgloss.Top, msg)
 	}
-	return lipgloss.NewStyle().Width(m.listWidth()).Height(m.height).Render(m.list.View())
+	return boxNoWrap(lipgloss.NewStyle(), m.list.View(), m.listWidth(), m.height)
 }
 
 // rightPaneView renders the mockup's terminal-pane chrome for the selected
@@ -195,7 +195,7 @@ func (m *sessionsModel) rightPaneView() string {
 	)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, header, "", body)
-	return m.styles.SidePanel.Width(m.rightPaneWidth()).Height(m.height).Render(content)
+	return boxNoWrap(m.styles.SidePanel, content, m.rightPaneWidth(), m.height)
 }
 
 // BuildSessionSpec constructs the native CLI argv for connecting to a VM.

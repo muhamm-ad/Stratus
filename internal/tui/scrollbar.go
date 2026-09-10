@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func clipLine(s string, cols int) string {
@@ -40,6 +41,61 @@ func padBlock(s string, width, height int) string {
 		lines = lines[:height]
 	}
 	return strings.Join(lines, "\n")
+}
+
+// boxNoWrap sizes s to w×h inside st without word-wrapping. Lip Gloss Width()
+// wraps by default, which warps borders; we clip first so Width only pads.
+func boxNoWrap(st lipgloss.Style, s string, w, h int) string {
+	if w < 1 {
+		w = 1
+	}
+	if h < 1 {
+		h = 1
+	}
+	innerW := max(1, w-st.GetHorizontalFrameSize())
+	innerH := max(1, h-st.GetVerticalFrameSize())
+	return st.Width(w).Height(h).MaxWidth(w).MaxHeight(h).Render(padBlock(s, innerW, innerH))
+}
+
+func cropLine(s string, x, w int) string {
+	if w <= 0 {
+		return ""
+	}
+	if x < 0 {
+		x = 0
+	}
+	if x >= lipgloss.Width(s) {
+		return strings.Repeat(" ", w)
+	}
+	return padBlock(ansi.Cut(s, x, x+w), w, 1)
+}
+
+// cropBlock returns the w×h window of s whose top-left is (x, y) in cells.
+func cropBlock(s string, x, y, w, h int) string {
+	if w < 1 {
+		w = 1
+	}
+	if h < 1 {
+		h = 1
+	}
+	if s == "" {
+		return padBlock("", w, h)
+	}
+	lines := strings.Split(s, "\n")
+	if y < 0 {
+		y = 0
+	}
+	if y > len(lines) {
+		y = len(lines)
+	}
+	end := min(len(lines), y+h)
+	var out []string
+	if y < len(lines) {
+		for _, line := range lines[y:end] {
+			out = append(out, cropLine(line, x, w))
+		}
+	}
+	return padBlock(strings.Join(out, "\n"), w, h)
 }
 
 func renderScrollbar(viewH, totalH, offset int, s Styles) string {
