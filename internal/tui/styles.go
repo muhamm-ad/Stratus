@@ -52,7 +52,7 @@ func NewStyles(th Theme) Styles {
 		TabInactive: lipgloss.NewStyle().Border(tabInactiveBorder, true).BorderForeground(th.Border).Foreground(th.Dim).Padding(0, 1),
 		Title:       lipgloss.NewStyle().Foreground(th.Accent).Bold(true),
 		SectionHead: lipgloss.NewStyle().Foreground(th.Dim).Bold(true), // callers upper-case the text
-		StatusBar:   lipgloss.NewStyle().Background(th.Surface).Foreground(th.Dim),
+		StatusBar:   lipgloss.NewStyle().Background(th.Bg).Foreground(th.Dim),
 		FilterLine:  lipgloss.NewStyle().Foreground(th.Dim),
 		Box:         lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(th.Border).Background(th.Surface).Padding(1, 3),
 		SidePanel:   lipgloss.NewStyle().Border(lipgloss.NormalBorder(), false, false, false, true).BorderForeground(th.Border).Background(th.Surface).Padding(0, 1),

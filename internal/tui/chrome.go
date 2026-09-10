@@ -146,7 +146,7 @@ func (a *App) filterLineView() string {
 }
 
 func (a *App) statusLeftView() string {
-	return a.styles.Dim.Render(a.keys.StatusHint(a.tab))
+	return a.keys.StatusHint(a.tab)
 }
 
 func (a *App) statusRightView() string {
@@ -165,10 +165,8 @@ func (a *App) statusRightView() string {
 	// result := fmt.Sprintf("%d/%d vms · %d sess · %s · thm:%s · %d×%d",
 	// 	len(a.inv.filteredVM), len(a.inv.allVM), len(a.sess.sessions), sync, Themes[a.themeIdx].Name, a.width, a.height)
 
-	result := fmt.Sprintf("%d/%d vms · %d sess · %s",
+	return fmt.Sprintf("%d/%d vms · %d sess · %s",
 		len(a.inv.filteredVM), len(a.inv.allVM), len(a.sess.sessions), sync)
-
-	return a.styles.Dim.Render(result)
 }
 
 func (a *App) bottomChromeView() string {
@@ -177,8 +175,7 @@ func (a *App) bottomChromeView() string {
 	if a.overlay == overlaySidebar {
 		return boxNoWrap(a.styles.StatusBar, clipLine(left, w), w, 1)
 	}
-	right := a.statusRightView()
-	row := joinClipRow(left, right, w)
+	row := joinClipRow(left, a.statusRightView(), w)
 	return boxNoWrap(a.styles.StatusBar, row, w, 1)
 }
 

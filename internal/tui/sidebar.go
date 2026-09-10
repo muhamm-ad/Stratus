@@ -161,21 +161,22 @@ func (m sidebarModel) listBody(s Styles, logs logPane, innerW int) string {
 		for _, e := range m.notifs.entries {
 			rows = append(rows, formatNotifBlock(s, e, innerW))
 		}
-		return strings.Join(rows, "\n\n")
+		return strings.Join(rows, "\n")
 	}
 }
 
 func formatNotifBlock(s Styles, e notifEntry, innerW int) string {
-	mark, msgStyle := "●", s.OK
+	msgStyle := s.OK
 	switch e.key {
 	case bubbleup.ErrorKey:
-		mark, msgStyle = "✖", s.Err
+		msgStyle = s.Err
 	case bubbleup.WarnKey:
-		mark, msgStyle = "▲", s.Warn
+		msgStyle = s.Warn
 	case bubbleup.DebugKey:
-		mark, msgStyle = "◆", s.Dim
+		msgStyle = s.Dim
 	}
-	prefix := s.Dim.Render(e.ts) + " " + msgStyle.Render(mark) + notifIconGap
+
+	prefix := s.Dim.Render(e.ts) + " "
 	prefixW := lipgloss.Width(prefix)
 	msgW := max(4, innerW-prefixW)
 	wrapped := lipgloss.Wrap(e.msg, msgW, "")

@@ -237,7 +237,7 @@ func (a *App) handle(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// a.loggedUser = a.styles.Dim.Render(userName + " (" + userEmail + ") · " + identityProviderId)
 			a.loggedUserLabel = a.styles.Dim.Render(userName + " via " + identityProviderId)
 			cmds = append(cmds, a.log("INFO", "signed in as "+userName+" via "+identityProviderId))
-			cmds = append(cmds, a.notify(bubbleup.InfoKey, "welcome, "+userName+" — signed in via "+identityProviderId))
+			cmds = append(cmds, a.notify(bubbleup.InfoKey, "welcome, "+userName))
 		}
 
 		for cp, cerr := range msg.cpErrors {
@@ -259,7 +259,7 @@ func (a *App) handle(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if errors.Is(msg.err, core.ErrNotAuthenticated) || errors.Is(msg.err, core.ErrExchange) {
 			return a, tea.Batch(
 				a.log("WARN", provider_str+" token expired"),
-				a.notify(bubbleup.ErrorKey, provider_str+": session expired, VMs not loaded — press R to reconnect"),
+				a.notify(bubbleup.ErrorKey, provider_str+": session expired, VMs not loaded"),
 			)
 		}
 		return a, tea.Batch(
@@ -297,7 +297,7 @@ func (a *App) handle(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tokenExpiredMsg:
 		return a, tea.Batch(
 			a.log("WARN", string(msg.provider)+" token expired"),
-			a.notify(bubbleup.ErrorKey, string(msg.provider)+": session expired, VMs not loaded — press R to reconnect"),
+			a.notify(bubbleup.ErrorKey, string(msg.provider)+": session expired, VMs not loaded"),
 		)
 
 	case providerReconnectOKMsg:
