@@ -18,6 +18,7 @@ type KeyMap struct {
 	Audit     AuditMap
 	Settings  SettingsMap
 	Overlay   OverlayMap
+	Sidebar   SidebarMap
 }
 
 func DefaultKeys() KeyMap {
@@ -29,6 +30,7 @@ func DefaultKeys() KeyMap {
 		Audit:     defaultAuditKeys(),
 		Settings:  defaultSettingsKeys(),
 		Overlay:   defaultOverlayKeys(),
+		Sidebar:   defaultSidebarKeys(),
 	}
 }
 
@@ -57,6 +59,9 @@ func (k KeyMap) MatchMouse(button tea.MouseButton, hit HitID, t tab) Action {
 		return act
 	}
 	if act := k.Overlay.MatchMouse(button, hit); act != ActionNone {
+		return act
+	}
+	if act := k.Sidebar.MatchMouse(button, hit); act != ActionNone {
 		return act
 	}
 	switch t {
@@ -104,6 +109,7 @@ func (k KeyMap) StatusHint(t tab) string {
 	globalHints := []string{
 		keyed(k.Global.Palette, "cmd"),
 		keyed(k.Global.Help, "help"),
+		keyed(k.Global.Sidebar, "sidebar"),
 		// keyed(k.Global.Quit, "quit"),
 	}
 	result = append(result, globalHints...)
@@ -118,6 +124,7 @@ func (k KeyMap) StatusHint(t tab) string {
 // GlobalMap is always active on the app screen (not while typing search).
 type GlobalMap struct {
 	Help, Palette, Theme, Logs Binding
+	Sidebar                    Binding
 	Quit, ForceQuit            Binding
 	Reconnect                  Binding
 	TabInventory, TabSessions  Binding
@@ -130,6 +137,7 @@ func defaultGlobalKeys() GlobalMap {
 		Palette:      bind(ActionPalette, HitPalette, ":", "cmd", ":"),
 		Theme:        bind(ActionTheme, HitTheme, "ctrl+shift+t", "theme", "ctrl+shift+t"),
 		Logs:         bind(ActionLogs, HitLogs, "ctrl+shift+l", "log alerts", "ctrl+shift+l"),
+		Sidebar:      bind(ActionSidebar, HitSidebar, "ctrl+r", "sidebar", "ctrl+r"),
 		Quit:         bind(ActionQuit, HitQuit, "ctrl+q", "quit", "ctrl+q"),
 		ForceQuit:    bind(ActionForceQuit, HitNone, "ctrl+c", "force quit", "ctrl+c"),
 		Reconnect:    bind(ActionReconnect, HitReconnect, "R", "reconnect", "R"),
@@ -142,7 +150,7 @@ func defaultGlobalKeys() GlobalMap {
 
 func (g GlobalMap) Bindings() []Binding {
 	return []Binding{
-		g.ForceQuit, g.Help, g.Palette, g.Theme, g.Logs, g.Quit, g.Reconnect,
+		g.ForceQuit, g.Help, g.Palette, g.Theme, g.Logs, g.Sidebar, g.Quit, g.Reconnect,
 		g.TabInventory, g.TabSessions, g.TabAudit, g.TabSettings,
 	}
 }
@@ -223,6 +231,35 @@ func (o OverlayMap) Match(msg fmt.Stringer) Action {
 
 func (o OverlayMap) MatchMouse(button tea.MouseButton, hit HitID) Action {
 	return matchMouse(button, hit, o.Bindings())
+}
+
+// ---------------------------------------------------------------------------
+// Sidebar
+// ---------------------------------------------------------------------------
+
+// SidebarMap is only matched while the sidebar overlay is open, so 1/2
+// keep switching the main tabs when the drawer is closed.
+type SidebarMap struct {
+	TabNotif, TabLogs Binding
+}
+
+func defaultSidebarKeys() SidebarMap {
+	return SidebarMap{
+		TabNotif: bind(ActionSidebarNotif, HitSidebarNotif, "n", "notifications", "n"),
+		TabLogs:  bind(ActionSidebarLogs, HitSidebarLogs, "l", "logs", "l"),
+	}
+}
+
+func (s SidebarMap) Bindings() []Binding {
+	return []Binding{s.TabNotif, s.TabLogs}
+}
+
+func (s SidebarMap) Match(msg fmt.Stringer) Action {
+	return matchKey(msg, s.Bindings())
+}
+
+func (s SidebarMap) MatchMouse(button tea.MouseButton, hit HitID) Action {
+	return matchMouse(button, hit, s.Bindings())
 }
 
 // ---------------------------------------------------------------------------

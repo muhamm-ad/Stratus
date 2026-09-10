@@ -27,19 +27,23 @@ func (a *App) topChromeView() string {
 	tabBar := a.tabBarView()
 
 	gapWidth := max(0, a.width-lipgloss.Width(tabBar))
-	identity := lipgloss.NewStyle().Inline(true).MaxWidth(gapWidth).Render(a.loggedUserLabel)
-	gap := a.styles.TabInactive.
-		BorderTop(false).
-		BorderLeft(false).
-		BorderRight(false).
-		Padding(0, 0).
-		Width(gapWidth).
-		Align(lipgloss.Right).
-		Render(lipgloss.JoinVertical(
-			lipgloss.Right,
-			identity,
-			a.providerPillsView(),
-		))
+	handle := ""
+	if a.overlay != overlaySidebar {
+		handle = sidebarHandleView(a.styles, false)
+	}
+	const chromeRightPad = 2
+	textW := max(0, gapWidth-chromeRightPad)
+	pad := strings.Repeat(" ", chromeRightPad)
+	identity := lipgloss.NewStyle().Inline(true).MaxWidth(textW).Render(a.loggedUserLabel) + pad
+	pills := lipgloss.NewStyle().Inline(true).MaxWidth(max(0, textW-1)).Render(a.providerPillsView()) + pad
+	ruleW := max(0, gapWidth-lipgloss.Width(handle))
+	rule := lipgloss.NewStyle().Foreground(a.styles.th.Border).Render(strings.Repeat("─", ruleW))
+	underline := rule
+	if handle != "" {
+		underline = lipgloss.JoinHorizontal(lipgloss.Bottom, rule, handle)
+	}
+	gap := lipgloss.JoinVertical(lipgloss.Right, identity, pills, underline)
+	gap = lipgloss.NewStyle().Width(gapWidth).Align(lipgloss.Right).Render(gap)
 	return a.styles.Header.Width(a.width).Render(
 		lipgloss.JoinHorizontal(lipgloss.Bottom, tabBar, gap),
 	)
@@ -153,14 +157,20 @@ func (a *App) statusRightView() string {
 	if busy {
 		sync = "syncing…"
 	}
-	result := fmt.Sprintf("%d/%d vms · %d sess · %s · thm:%s · %d×%d",
-		len(a.inv.filteredVM), len(a.inv.allVM), len(a.sess.sessions), sync, Themes[a.themeIdx].Name, a.width, a.height)
+	// result := fmt.Sprintf("%d/%d vms · %d sess · %s · thm:%s · %d×%d",
+	// 	len(a.inv.filteredVM), len(a.inv.allVM), len(a.sess.sessions), sync, Themes[a.themeIdx].Name, a.width, a.height)
+
+	result := fmt.Sprintf("%d/%d vms · %d sess · %s",
+		len(a.inv.filteredVM), len(a.inv.allVM), len(a.sess.sessions), sync)
 
 	return a.styles.Dim.Render(result)
 }
 
 func (a *App) bottomChromeView() string {
 	left := a.statusLeftView()
+	if a.overlay == overlaySidebar {
+		return a.styles.StatusBar.Width(a.width).Height(1).MaxHeight(1).Render(left)
+	}
 	right := a.statusRightView()
 	gapWidth := max(0, a.width-lipgloss.Width(left))
 	rightAligned := lipgloss.NewStyle().Width(gapWidth).Align(lipgloss.Right).Render(right)

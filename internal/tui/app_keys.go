@@ -213,6 +213,9 @@ func (a *App) handleGlobal(act Action) (tea.Model, tea.Cmd) {
 		return a, a.log("INFO", "help")
 	case ActionLogs:
 		return a, a.toggleLogAlerts()
+	case ActionSidebar:
+		a.overlay = overlaySidebar
+		return a, a.log("INFO", "sidebar")
 	case ActionTheme:
 		a.setTheme((a.themeIdx + 1) % len(Themes))
 		return a, a.log("INFO", "theme: "+Themes[a.themeIdx].Name)
@@ -392,6 +395,31 @@ func (a *App) updateOverlay(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case ActionJumpBottom:
 			a.help.scroll = a.help.maxScroll(a.styles, a.keys, a.width, a.height)
 		}
+	case overlaySidebar:
+		if a.keys.Global.Match(msg) == ActionSidebar || a.keys.Nav.Match(msg) == ActionBack {
+			a.overlay = overlayNone
+			return a, a.log("INFO", "overlay closed")
+		}
+		switch a.keys.Sidebar.Match(msg) {
+		case ActionSidebarNotif:
+			a.sidebar.setTab(sidebarTabNotif)
+		case ActionSidebarLogs:
+			a.sidebar.setTab(sidebarTabLogs)
+		}
+		switch a.keys.Nav.Match(msg) {
+		case ActionMoveUp:
+			a.sidebar.scrollBy(-1, a.styles, a.height, a.logs)
+		case ActionMoveDown:
+			a.sidebar.scrollBy(1, a.styles, a.height, a.logs)
+		case ActionPageUp:
+			a.sidebar.scrollBy(-a.sidebar.pageSize(a.styles, a.height), a.styles, a.height, a.logs)
+		case ActionPageDown:
+			a.sidebar.scrollBy(a.sidebar.pageSize(a.styles, a.height), a.styles, a.height, a.logs)
+		case ActionJumpTop:
+			a.sidebar.scroll = 0
+		case ActionJumpBottom:
+			a.sidebar.scroll = a.sidebar.maxScroll(a.styles, a.height, a.logs)
+		}
 	case overlayConfirmQuit:
 		act := a.keys.Overlay.Match(msg)
 		if act == ActionNone {
@@ -465,6 +493,8 @@ func (a *App) runPaletteCommand(c command) tea.Cmd {
 		return cmd
 	case "logs":
 		return a.toggleLogAlerts()
+	case "sidebar":
+		a.overlay = overlaySidebar
 	case "help":
 		a.overlay = overlayHelp
 		a.help.scroll = 0

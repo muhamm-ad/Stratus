@@ -77,6 +77,14 @@ func helpCategories(k KeyMap) []helpCategory {
 				helpEntryFrom(k.Global.Reconnect, "reconnect expired provider"),
 			},
 		},
+		{
+			title: "Sidebar",
+			entries: []helpEntry{
+				helpEntryFrom(k.Global.Sidebar, "show / hide the sidebar"),
+				helpEntryFrom(k.Sidebar.TabNotif, "notifications tab (while open)"),
+				helpEntryFrom(k.Sidebar.TabLogs, "logs tab (while open)"),
+			},
+		},
 	}
 }
 

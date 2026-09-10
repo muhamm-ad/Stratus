@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -19,6 +20,7 @@ const (
 	ActionPalette
 	ActionTheme
 	ActionLogs
+	ActionSidebar
 	ActionQuit
 	ActionForceQuit
 	ActionReconnect
@@ -63,6 +65,8 @@ const (
 	ActionOverlayConfirm
 	ActionOverlayYes
 	ActionOverlayNo
+	ActionSidebarNotif
+	ActionSidebarLogs
 )
 
 // HitID names a clickable region. Fill Binding.Mouse.Hit with the same ID
@@ -77,6 +81,9 @@ const (
 	HitPalette      HitID = "palette"
 	HitTheme        HitID = "theme"
 	HitLogs         HitID = "logs"
+	HitSidebar      HitID = "sidebar"
+	HitSidebarNotif HitID = "sidebar.notifications"
+	HitSidebarLogs  HitID = "sidebar.logs"
 	HitQuit         HitID = "quit"
 	HitReconnect    HitID = "reconnect"
 	HitTabInventory HitID = "tab.inventory"
@@ -159,11 +166,138 @@ func bindWheel(act Action, button tea.MouseButton, helpKey, helpDesc string, key
 
 func matchKey(msg fmt.Stringer, bs []Binding) Action {
 	for _, b := range bs {
-		if key.Matches(msg, b.Keys) {
+		if keyEventMatches(msg, b.Keys) {
 			return b.Action
 		}
 	}
 	return ActionNone
+}
+
+// keyEventMatches compares bindings against both the printable String()
+// form and the modifier+code form. bubbles/key.Matches only uses String(),
+// which drops Shift on combos like ctrl+shift+t (it may report "T" or
+// "ctrl+T" instead of "ctrl+shift+t").
+func keyEventMatches(msg fmt.Stringer, b key.Binding) bool {
+	if !b.Enabled() {
+		return false
+	}
+	if key.Matches(msg, b) {
+		return true
+	}
+	got := canonicalEvent(msg)
+	if got == "" {
+		return false
+	}
+	for _, want := range b.Keys() {
+		if canonicalKeyName(want) == got {
+			return true
+		}
+	}
+	return false
+}
+
+func canonicalEvent(msg fmt.Stringer) string {
+	if kp, ok := msg.(tea.KeyPressMsg); ok {
+		if s := canonicalFromKey(kp.Key()); s != "" {
+			return s
+		}
+		return canonicalKeyName(kp.Keystroke())
+	}
+	return canonicalKeyName(msg.String())
+}
+
+func canonicalFromKey(k tea.Key) string {
+	hasCtrl := k.Mod.Contains(tea.ModCtrl)
+	hasAlt := k.Mod.Contains(tea.ModAlt)
+	hasShift := k.Mod.Contains(tea.ModShift)
+
+	code := k.Code
+	if k.BaseCode != 0 {
+		code = k.BaseCode
+	}
+	if code >= 'A' && code <= 'Z' {
+		hasShift = true
+		code = code - 'A' + 'a'
+	}
+
+	name := keyCodeName(code)
+	if name == "" {
+		return ""
+	}
+
+	var parts []string
+	if hasCtrl {
+		parts = append(parts, "ctrl")
+	}
+	if hasAlt {
+		parts = append(parts, "alt")
+	}
+	if hasShift {
+		parts = append(parts, "shift")
+	}
+	return strings.Join(append(parts, name), "+")
+}
+
+func canonicalKeyName(s string) string {
+	if s == "" {
+		return ""
+	}
+	parts := strings.Split(s, "+")
+	last := parts[len(parts)-1]
+	hasShift := false
+	mods := make([]string, 0, len(parts))
+	for _, p := range parts[:len(parts)-1] {
+		p = strings.ToLower(p)
+		if p == "shift" {
+			hasShift = true
+			continue
+		}
+		mods = append(mods, p)
+	}
+	if len(last) == 1 && last[0] >= 'A' && last[0] <= 'Z' {
+		hasShift = true
+	}
+	last = strings.ToLower(last)
+	if hasShift {
+		mods = append(mods, "shift")
+	}
+	return strings.Join(append(mods, last), "+")
+}
+
+func keyCodeName(code rune) string {
+	switch code {
+	case tea.KeyEnter:
+		return "enter"
+	case tea.KeyTab:
+		return "tab"
+	case tea.KeySpace:
+		return "space"
+	case tea.KeyEsc:
+		return "esc"
+	case tea.KeyUp:
+		return "up"
+	case tea.KeyDown:
+		return "down"
+	case tea.KeyLeft:
+		return "left"
+	case tea.KeyRight:
+		return "right"
+	case tea.KeyPgUp:
+		return "pgup"
+	case tea.KeyPgDown:
+		return "pgdown"
+	case tea.KeyHome:
+		return "home"
+	case tea.KeyEnd:
+		return "end"
+	case tea.KeyBackspace:
+		return "backspace"
+	default:
+		if code > 0 && code < 128 && code != ' ' {
+			return strings.ToLower(string(code))
+		}
+		return ""
+	}
 }
 
 func matchMouse(button tea.MouseButton, hit HitID, bs []Binding) Action {

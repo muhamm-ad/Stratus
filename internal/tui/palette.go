@@ -33,6 +33,7 @@ var allCommands = []command{
 	{"reconnect", "reconnect <prov>"},
 	{"theme", "theme <name>"},
 	{"logs", "toggle log alerts"},
+	{"sidebar", "toggle sidebar"},
 	{"help", "show help"},
 	{"quit", "sign out"},
 }

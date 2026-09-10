@@ -21,6 +21,8 @@ type Styles struct {
 	FilterLine                             lipgloss.Style
 	Box                                    lipgloss.Style // rounded border, surface bg (login)
 	SidePanel                              lipgloss.Style // left-border-only docked pane (vm detail, sessions)
+	Sidebar                                lipgloss.Style // right-docked overlay drawer
+	Handle                                 lipgloss.Style // sidebar toggle on the header rule
 	Cursor                                 lipgloss.Style // ▸ cursor (accent)
 	Marked                                 lipgloss.Style // warn-tinted marked row
 	Dialog                                 lipgloss.Style // overlay chrome: rounded accent border, padded
@@ -54,12 +56,23 @@ func NewStyles(th Theme) Styles {
 		FilterLine:  lipgloss.NewStyle().Foreground(th.Dim),
 		Box:         lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(th.Border).Background(th.Surface).Padding(1, 3),
 		SidePanel:   lipgloss.NewStyle().Border(lipgloss.NormalBorder(), false, false, false, true).BorderForeground(th.Border).Background(th.Surface).Padding(0, 1),
-		Cursor:      lipgloss.NewStyle().Foreground(th.Accent).Bold(true),
-		Marked:      lipgloss.NewStyle().Background(blend(th.Warn, th.Bg)),
+		Sidebar: lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder(), false, false, false, true).
+			BorderForeground(th.Accent).
+			BorderBackground(th.Bg).
+			Background(th.Bg).
+			Padding(0, 1),
+		Handle: lipgloss.NewStyle().
+			Foreground(th.Accent).
+			Background(th.Bg).
+			Bold(true),
+		Cursor: lipgloss.NewStyle().Foreground(th.Accent).Bold(true),
+		Marked: lipgloss.NewStyle().Background(blend(th.Warn, th.Bg)),
 		Dialog: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(th.Accent).
-			Background(th.Surface).
+			BorderBackground(th.Bg).
+			Background(th.Bg).
 			Padding(1, 4),
 		DialogTitle: lipgloss.NewStyle().Foreground(th.Text).Bold(true),
 		DialogBody:  lipgloss.NewStyle().Foreground(th.Dim),

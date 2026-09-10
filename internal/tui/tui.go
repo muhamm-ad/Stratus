@@ -35,10 +35,11 @@ const (
 	overlayPalette
 	overlayHelp
 	overlayConfirmQuit
+	overlaySidebar
 )
 
-// App is the root Bubble Tea model. It owns the chrome and delegates to per-tab
-// sub-models. Only App implements the full tea.Model (its View returns tea.View);
+// App is the root Bubble Tea model. It owns the chrome and delegates to per-tab sub-models.
+// Only App implements the full tea.Model (its View returns tea.View);
 // sub-models return plain strings, as recommended for children in Bubble Tea v2.
 type App struct {
 	svc  *service.Service
@@ -61,6 +62,7 @@ type App struct {
 	settings   settingsModel
 	cmdPalette paletteModel
 	help       helpModel
+	sidebar    sidebarModel
 	logs       logPane
 
 	alert    bubbleup.AlertModel
@@ -96,6 +98,7 @@ func New(svc *service.Service) *App {
 	a.settings = newSettingsModel(svc, a.styles)
 	a.cmdPalette = newPaletteModel(a.styles)
 	a.help = newHelpModel()
+	a.sidebar = newSidebarModel()
 	a.logs = newLogPane()
 	return a
 }
@@ -122,25 +125,32 @@ func (a *App) Init() tea.Cmd {
 	return tea.Batch(a.login.spinner.Tick, a.alert.Init())
 }
 
-func (a *App) notify(key, message string) tea.Cmd {
+func (a *App) toast(key, message string) tea.Cmd {
 	if a.overlay != overlayNone || a.tooSmall() {
 		return nil
 	}
 	return a.alert.NewAlertCmd(key, message)
 }
 
+func (a *App) notify(key, message string) tea.Cmd {
+	if !a.sidebar.notifs.add(key, message) {
+		return nil
+	}
+	return a.toast(key, message)
+}
+
 func (a *App) log(level, msg string) tea.Cmd {
 	a.logs.add(level, msg)
-	if !a.settings.logAlerts {
+	if !a.settings.logAlerts || !a.logs.shouldToast(msg) {
 		return nil
 	}
 	switch level {
 	case "WARN":
-		return a.notify(bubbleup.WarnKey, msg)
+		return a.toast(bubbleup.WarnKey, msg)
 	case "ERR", "ERROR":
-		return a.notify(bubbleup.ErrorKey, msg)
+		return a.toast(bubbleup.ErrorKey, msg)
 	default:
-		return a.notify(bubbleup.DebugKey, msg)
+		return a.toast(bubbleup.DebugKey, msg)
 	}
 }
 
@@ -316,7 +326,7 @@ func (a *App) View() tea.View {
 	// The min-size dialog wins over help/quit/palette.
 	if a.tooSmall() || a.overlay != overlayNone {
 		body = a.composeOverlay(body)
-	} else {
+	} else if a.screen == screenLogin {
 		body = a.alert.Render(body)
 	}
 
@@ -324,6 +334,9 @@ func (a *App) View() tea.View {
 	v.AltScreen = true
 	v.BackgroundColor = a.styles.th.Bg
 	v.WindowTitle = "stratus — multi-cloud vm gateway"
+	// Ask the terminal to report modifiers (ctrl+shift+t vs ctrl+t).
+	v.KeyboardEnhancements.ReportAllKeysAsEscapeCodes = true
+	v.KeyboardEnhancements.ReportAlternateKeys = true
 	// v.MouseMode = tea.MouseModeAllMotion
 	return v
 }
@@ -338,6 +351,7 @@ func (a *App) appView() string {
 	top := a.topChromeView()
 	bottom := a.bottomChromeView()
 	midH := max(1, a.height-lipgloss.Height(top)-lipgloss.Height(bottom))
+	contentW := max(1, a.width)
 
 	var mid string
 	switch a.tab {
@@ -348,10 +362,15 @@ func (a *App) appView() string {
 	case tabAudit:
 		mid = a.audit.View()
 	case tabSettings:
-		mid = a.settings.View(a.width, midH, a.themeIdx)
+		mid = a.settings.View(contentW, midH, a.themeIdx)
 	}
 	// Stretch the tab body so the status bar stays on the last terminal row
 	// even when that tab's content is shorter than the window.
-	mid = lipgloss.NewStyle().Width(a.width).Height(midH).MaxHeight(midH).Render(mid)
-	return lipgloss.JoinVertical(lipgloss.Left, top, mid, bottom)
+	mid = lipgloss.NewStyle().Width(contentW).Height(midH).MaxHeight(midH).Render(mid)
+	upper := lipgloss.JoinVertical(lipgloss.Left, top, mid)
+	if a.tooSmall() || a.overlay != overlayNone {
+		return lipgloss.JoinVertical(lipgloss.Left, upper, bottom)
+	}
+	// Overlay toasts on the content above the status bar so they don't cover it.
+	return lipgloss.JoinVertical(lipgloss.Left, a.alert.Render(upper), bottom)
 }

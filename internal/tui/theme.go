@@ -8,7 +8,7 @@ import (
 )
 
 // Theme is a color palette. Stratus ships four themes that the user cycles
-// with the 't' key. Fixed palettes use hex colors; the "terminal" theme uses
+// with ctrl+shift+t. Fixed palettes use hex colors; the "terminal" theme uses
 // lipgloss.NoColor and standard ANSI colors so the emulator's own theme shows
 // through.
 type Theme struct {
