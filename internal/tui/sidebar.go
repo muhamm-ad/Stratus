@@ -13,6 +13,7 @@ type sidebarTab int
 const (
 	sidebarTabNotif sidebarTab = iota
 	sidebarTabLogs
+	sidebarTabSettings
 )
 
 // sidebarWidth is fixed so the drawer never shrinks (and wraps) on resize.
@@ -72,7 +73,7 @@ func (m *sidebarModel) setTab(t sidebarTab) {
 	}
 }
 
-func (m sidebarModel) View(s Styles, k KeyMap, h int, logs logPane) string {
+func (m sidebarModel) View(s Styles, k KeyMap, h int, logs logPane, settings settingsModel, themeIdx int) string {
 	h = max(1, h)
 	panelW := sidebarWidth
 
@@ -83,7 +84,7 @@ func (m sidebarModel) View(s Styles, k KeyMap, h int, logs logPane) string {
 	footer := sidebarFooter(s, k, innerW)
 	listH := max(1, innerH-lipgloss.Height(tabs)-lipgloss.Height(footer))
 
-	body := m.listBody(s, logs, innerW)
+	body := m.listBody(s, logs, settings, themeIdx, innerW)
 	bodyLines := strings.Split(body, "\n")
 	if body == "" {
 		bodyLines = nil
@@ -111,10 +112,23 @@ func (m sidebarModel) View(s Styles, k KeyMap, h int, logs logPane) string {
 func (m sidebarModel) tabRow(s Styles, innerW int) string {
 	notif := sidebarTabStyle(s, m.tab == sidebarTabNotif).Render("notifications [n]")
 	logs := sidebarTabStyle(s, m.tab == sidebarTabLogs).Render("logs [l]")
-	used := lipgloss.Width(notif) + lipgloss.Width(logs)
-	fillW := max(0, innerW-used)
-	parts := []string{notif, logs}
-	if fillW > 0 {
+	settings := sidebarTabStyle(s, m.tab == sidebarTabSettings).Render("settings [s]")
+	if lipgloss.Width(notif)+lipgloss.Width(logs)+lipgloss.Width(settings) > innerW {
+		top := sidebarTabFill(s, innerW, notif, logs)
+		bottom := sidebarTabFill(s, innerW, settings)
+		row := lipgloss.JoinVertical(lipgloss.Left, top, bottom)
+		return padBlock(row, innerW, max(1, lipgloss.Height(row)))
+	}
+	return sidebarTabFill(s, innerW, notif, logs, settings)
+}
+
+func sidebarTabFill(s Styles, innerW int, tabs ...string) string {
+	used := 0
+	for _, t := range tabs {
+		used += lipgloss.Width(t)
+	}
+	parts := append([]string{}, tabs...)
+	if fillW := max(0, innerW-used); fillW > 0 {
 		fill := s.TabInactive.
 			BorderTop(false).
 			BorderLeft(false).
@@ -141,7 +155,7 @@ func sidebarTabStyle(s Styles, active bool) lipgloss.Style {
 	return s.TabInactive
 }
 
-func (m sidebarModel) listBody(s Styles, logs logPane, innerW int) string {
+func (m sidebarModel) listBody(s Styles, logs logPane, settings settingsModel, themeIdx, innerW int) string {
 	switch m.tab {
 	case sidebarTabLogs:
 		if len(logs.entries) == 0 {
@@ -153,6 +167,8 @@ func (m sidebarModel) listBody(s Styles, logs logPane, innerW int) string {
 			rows = append(rows, clipLine(formatLogRow(s, e), innerW))
 		}
 		return strings.Join(rows, "\n")
+	case sidebarTabSettings:
+		return settings.sidebarBody(s, innerW, themeIdx)
 	default:
 		if len(m.notifs.entries) == 0 {
 			return ""
@@ -218,21 +234,21 @@ func (m sidebarModel) listHeight(s Styles, h int) int {
 	return max(1, innerH-lipgloss.Height(m.tabRow(s, innerW))-footerH)
 }
 
-func (m sidebarModel) bodyLineCount(s Styles, logs logPane) int {
-	body := m.listBody(s, logs, sidebarInnerWidth(s))
+func (m sidebarModel) bodyLineCount(s Styles, logs logPane, settings settingsModel, themeIdx int) int {
+	body := m.listBody(s, logs, settings, themeIdx, sidebarInnerWidth(s))
 	if body == "" {
 		return 0
 	}
 	return lipgloss.Height(body)
 }
 
-func (m *sidebarModel) maxScroll(s Styles, h int, logs logPane) int {
-	return max(0, m.bodyLineCount(s, logs)-m.listHeight(s, h))
+func (m *sidebarModel) maxScroll(s Styles, h int, logs logPane, settings settingsModel, themeIdx int) int {
+	return max(0, m.bodyLineCount(s, logs, settings, themeIdx)-m.listHeight(s, h))
 }
 
-func (m *sidebarModel) scrollBy(delta int, s Styles, h int, logs logPane) {
+func (m *sidebarModel) scrollBy(delta int, s Styles, h int, logs logPane, settings settingsModel, themeIdx int) {
 	m.scroll += delta
-	maxScroll := m.maxScroll(s, h, logs)
+	maxScroll := m.maxScroll(s, h, logs, settings, themeIdx)
 	if m.scroll < 0 {
 		m.scroll = 0
 	}

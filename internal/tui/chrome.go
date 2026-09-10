@@ -12,7 +12,6 @@ func (a *App) propagateSize() {
 	h := a.contentHeight()
 	w := a.layoutWidth()
 	a.inv.SetSize(w, h)
-	a.audit.SetSize(w, h)
 	a.sess.SetSize(w, h)
 }
 
@@ -95,8 +94,6 @@ func (a *App) tabBarView() string {
 	}{
 		{"inventory [1]", tabInventory},
 		{"sessions [2]", tabSessions},
-		{"audit [3]", tabAudit},
-		{"settings [4]", tabSettings},
 	}
 
 	rendered := make([]string, len(tabs))

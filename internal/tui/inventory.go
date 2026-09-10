@@ -109,8 +109,7 @@ func narrowTableColumns(w int) []table.Column {
 
 // vimTableKeyMap mirrors the app's own navigation keys (k/j/g/G) but
 // strips PageDown/HalfPageDown's default "f"/"space" bindings — those are
-// already claimed by FilterState and other app keys. Shared by the
-// inventory and audit tables.
+// already claimed by FilterState and other app keys.
 func vimTableKeyMap() table.KeyMap {
 	return table.KeyMap{
 		LineUp:       key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k/↑", "up")),

@@ -28,8 +28,6 @@ const (
 	// Tabs
 	ActionTabInventory
 	ActionTabSessions
-	ActionTabAudit
-	ActionTabSettings
 
 	// Navigation (shared across tabs and overlays)
 	ActionMoveUp
@@ -67,6 +65,7 @@ const (
 	ActionOverlayNo
 	ActionSidebarNotif
 	ActionSidebarLogs
+	ActionSidebarSettings
 )
 
 // HitID names a clickable region. Fill Binding.Mouse.Hit with the same ID
@@ -77,39 +76,38 @@ type HitID string
 const (
 	HitNone HitID = ""
 
-	HitHelp         HitID = "help"
-	HitPalette      HitID = "palette"
-	HitTheme        HitID = "theme"
-	HitLogs         HitID = "logs"
-	HitSidebar      HitID = "sidebar"
-	HitSidebarNotif HitID = "sidebar.notifications"
-	HitSidebarLogs  HitID = "sidebar.logs"
-	HitQuit         HitID = "quit"
-	HitReconnect    HitID = "reconnect"
-	HitTabInventory HitID = "tab.inventory"
-	HitTabSessions  HitID = "tab.sessions"
-	HitTabAudit     HitID = "tab.audit"
-	HitTabSettings  HitID = "tab.settings"
-	HitJumpTop      HitID = "nav.top"
-	HitJumpBottom   HitID = "nav.bottom"
-	HitSelect       HitID = "nav.select"
-	HitBack         HitID = "nav.back"
-	HitSearch       HitID = "inventory.search"
-	HitMark         HitID = "inventory.mark"
-	HitMarkAll      HitID = "inventory.markAll"
-	HitConnect      HitID = "inventory.connect"
-	HitStart        HitID = "inventory.start"
-	HitStop         HitID = "inventory.stop"
-	HitFilterProv   HitID = "inventory.filterProvider"
-	HitFilterState  HitID = "inventory.filterState"
-	HitFilterRegion HitID = "inventory.filterRegion"
-	HitSortKey      HitID = "inventory.sort"
-	HitSortDir      HitID = "inventory.sortDir"
-	HitClearFilters HitID = "inventory.clearFilters"
-	HitRefresh      HitID = "inventory.refresh"
-	HitCloseSession HitID = "sessions.close"
-	HitQuitSignOut  HitID = "overlay.quit.signOut"
-	HitQuitCancel   HitID = "overlay.quit.cancel"
+	HitHelp            HitID = "help"
+	HitPalette         HitID = "palette"
+	HitTheme           HitID = "theme"
+	HitLogs            HitID = "logs"
+	HitSidebar         HitID = "sidebar"
+	HitSidebarNotif    HitID = "sidebar.notifications"
+	HitSidebarLogs     HitID = "sidebar.logs"
+	HitSidebarSettings HitID = "sidebar.settings"
+	HitQuit            HitID = "quit"
+	HitReconnect       HitID = "reconnect"
+	HitTabInventory    HitID = "tab.inventory"
+	HitTabSessions     HitID = "tab.sessions"
+	HitJumpTop         HitID = "nav.top"
+	HitJumpBottom      HitID = "nav.bottom"
+	HitSelect          HitID = "nav.select"
+	HitBack            HitID = "nav.back"
+	HitSearch          HitID = "inventory.search"
+	HitMark            HitID = "inventory.mark"
+	HitMarkAll         HitID = "inventory.markAll"
+	HitConnect         HitID = "inventory.connect"
+	HitStart           HitID = "inventory.start"
+	HitStop            HitID = "inventory.stop"
+	HitFilterProv      HitID = "inventory.filterProvider"
+	HitFilterState     HitID = "inventory.filterState"
+	HitFilterRegion    HitID = "inventory.filterRegion"
+	HitSortKey         HitID = "inventory.sort"
+	HitSortDir         HitID = "inventory.sortDir"
+	HitClearFilters    HitID = "inventory.clearFilters"
+	HitRefresh         HitID = "inventory.refresh"
+	HitCloseSession    HitID = "sessions.close"
+	HitQuitSignOut     HitID = "overlay.quit.signOut"
+	HitQuitCancel      HitID = "overlay.quit.cancel"
 )
 
 // MouseBinding is the click/wheel counterpart of a key binding.

@@ -15,7 +15,6 @@ type KeyMap struct {
 	Nav       NavMap
 	Inventory InventoryMap
 	Sessions  SessionsMap
-	Audit     AuditMap
 	Settings  SettingsMap
 	Overlay   OverlayMap
 	Sidebar   SidebarMap
@@ -27,7 +26,6 @@ func DefaultKeys() KeyMap {
 		Nav:       defaultNavKeys(),
 		Inventory: defaultInventoryKeys(),
 		Sessions:  defaultSessionsKeys(),
-		Audit:     defaultAuditKeys(),
 		Settings:  defaultSettingsKeys(),
 		Overlay:   defaultOverlayKeys(),
 		Sidebar:   defaultSidebarKeys(),
@@ -40,10 +38,6 @@ func (k KeyMap) MatchTab(msg fmt.Stringer, t tab) Action {
 		return k.Inventory.Match(msg)
 	case tabSessions:
 		return k.Sessions.Match(msg)
-	case tabAudit:
-		return k.Audit.Match(msg)
-	case tabSettings:
-		return k.Settings.Match(msg)
 	default:
 		return ActionNone
 	}
@@ -69,10 +63,6 @@ func (k KeyMap) MatchMouse(button tea.MouseButton, hit HitID, t tab) Action {
 		return k.Inventory.MatchMouse(button, hit)
 	case tabSessions:
 		return k.Sessions.MatchMouse(button, hit)
-	case tabAudit:
-		return k.Audit.MatchMouse(button, hit)
-	case tabSettings:
-		return k.Settings.MatchMouse(button, hit)
 	default:
 		return ActionNone
 	}
@@ -93,10 +83,6 @@ func (k KeyMap) StatusHint(t tab) string {
 	// 	result = append(result,
 	// 		keyed(k.Nav.Enter, "jump to vm"),
 	// 	)
-	// case tabAudit:
-	// 	result = strings.Join([]string{
-	// 		keyed(k.Audit.Search, "filter"),
-	// 	}, " · ")
 	// default:
 	// 	result = []string{}
 	// }
@@ -122,7 +108,6 @@ type GlobalMap struct {
 	Quit, ForceQuit            Binding
 	Reconnect                  Binding
 	TabInventory, TabSessions  Binding
-	TabAudit, TabSettings      Binding
 }
 
 func defaultGlobalKeys() GlobalMap {
@@ -137,15 +122,13 @@ func defaultGlobalKeys() GlobalMap {
 		Reconnect:    bind(ActionReconnect, HitReconnect, "R", "reconnect", "R"),
 		TabInventory: bind(ActionTabInventory, HitTabInventory, "1", "inventory", "1"),
 		TabSessions:  bind(ActionTabSessions, HitTabSessions, "2", "sessions", "2"),
-		TabAudit:     bind(ActionTabAudit, HitTabAudit, "3", "audit", "3"),
-		TabSettings:  bind(ActionTabSettings, HitTabSettings, "4", "settings", "4"),
 	}
 }
 
 func (g GlobalMap) Bindings() []Binding {
 	return []Binding{
 		g.ForceQuit, g.Help, g.Palette, g.Theme, g.Logs, g.Sidebar, g.Quit, g.Reconnect,
-		g.TabInventory, g.TabSessions, g.TabAudit, g.TabSettings,
+		g.TabInventory, g.TabSessions,
 	}
 }
 
@@ -232,20 +215,22 @@ func (o OverlayMap) MatchMouse(button tea.MouseButton, hit HitID) Action {
 // ---------------------------------------------------------------------------
 
 // SidebarMap is only matched while the sidebar overlay is open, so 1/2
-// keep switching the main tabs when the drawer is closed.
+// keep switching the main tabs when the drawer is closed. `s` is safe
+// here because inventory mark is not matched while the drawer is up.
 type SidebarMap struct {
-	TabNotif, TabLogs Binding
+	TabNotif, TabLogs, TabSettings Binding
 }
 
 func defaultSidebarKeys() SidebarMap {
 	return SidebarMap{
-		TabNotif: bind(ActionSidebarNotif, HitSidebarNotif, "n", "notifications", "n"),
-		TabLogs:  bind(ActionSidebarLogs, HitSidebarLogs, "l", "logs", "l"),
+		TabNotif:    bind(ActionSidebarNotif, HitSidebarNotif, "n", "notifications", "n"),
+		TabLogs:     bind(ActionSidebarLogs, HitSidebarLogs, "l", "logs", "l"),
+		TabSettings: bind(ActionSidebarSettings, HitSidebarSettings, "s", "settings", "s"),
 	}
 }
 
 func (s SidebarMap) Bindings() []Binding {
-	return []Binding{s.TabNotif, s.TabLogs}
+	return []Binding{s.TabNotif, s.TabLogs, s.TabSettings}
 }
 
 func (s SidebarMap) Match(msg fmt.Stringer) Action {
@@ -328,23 +313,6 @@ func (m SessionsMap) Match(msg fmt.Stringer) Action {
 
 func (m SessionsMap) MatchMouse(button tea.MouseButton, hit HitID) Action {
 	return matchMouse(button, hit, m.Bindings())
-}
-
-// ---------------------------------------------------------------------------
-// Audit
-// ---------------------------------------------------------------------------
-
-// AuditMap is a placeholder so audit-only shortcuts have a home.
-type AuditMap struct{}
-
-func defaultAuditKeys() AuditMap { return AuditMap{} }
-
-func (m AuditMap) Bindings() []Binding { return nil }
-
-func (m AuditMap) Match(msg fmt.Stringer) Action { return ActionNone }
-
-func (m AuditMap) MatchMouse(button tea.MouseButton, hit HitID) Action {
-	return ActionNone
 }
 
 // ---------------------------------------------------------------------------

@@ -15,8 +15,7 @@ type command struct{ name, desc string }
 var allCommands = []command{
 	{"inventory", "go to inventory"},
 	{"sessions", "go to sessions"},
-	{"audit", "go to audit"},
-	{"settings", "go to settings"},
+	{"settings", "open settings"},
 	{"aws", "filter provider aws"},
 	{"azure", "filter provider azure"},
 	{"gcp", "filter provider gcp"},

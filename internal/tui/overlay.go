@@ -58,7 +58,7 @@ func (a *App) composeOverlay(background string) string {
 }
 
 func (a *App) composeSidebarOverlay(blurred string) string {
-	panel := opaqueOverlay(a.sidebar.View(a.styles, a.keys, a.height, a.logs), a.styles.th.Bg)
+	panel := opaqueOverlay(a.sidebar.View(a.styles, a.keys, a.height, a.logs, a.settings, a.themeIdx), a.styles.th.Bg)
 	handle := sidebarHandleView(a.styles, true)
 	px, py := sidebarOrigin(panel, a.width)
 	hx := max(0, px-lipgloss.Width(handle))

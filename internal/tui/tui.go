@@ -24,8 +24,6 @@ type tab int
 const (
 	tabInventory tab = iota
 	tabSessions
-	tabAudit
-	tabSettings
 )
 
 type overlay int
@@ -59,7 +57,6 @@ type App struct {
 	login      loginModel
 	inv        inventoryModel
 	sess       sessionsModel
-	audit      auditModel
 	settings   settingsModel
 	cmdPalette paletteModel
 	help       helpModel
@@ -95,7 +92,6 @@ func New(svc *service.Service) *App {
 	a.login = newLoginModel(svc, a.styles)
 	a.inv = newInventoryModel(svc, a.styles)
 	a.sess = newSessionsModel(svc, a.styles)
-	a.audit = newAuditModel(svc, a.styles)
 	a.settings = newSettingsModel(svc, a.styles)
 	a.cmdPalette = newPaletteModel(a.styles)
 	a.help = newHelpModel()
@@ -115,9 +111,8 @@ func (a *App) setTheme(themeIdx int) {
 	a.styles = NewStyles(Themes[themeIdx])
 	// a.login.applyStyles(a.styles)
 	a.inv.SetStyles(a.styles)
-	a.audit.applyStyles(a.styles)
 	a.sess.applyStyles(a.styles)
-	// a.settings.applyStyles(a.styles)
+	a.settings.applyStyles(a.styles)
 	a.cmdPalette.applyStyles(a.styles)
 }
 
@@ -161,10 +156,6 @@ func tabName(t tab) string {
 		return "inventory"
 	case tabSessions:
 		return "sessions"
-	case tabAudit:
-		return "audit"
-	case tabSettings:
-		return "settings"
 	default:
 		return "unknown"
 	}
@@ -398,10 +389,6 @@ func (a *App) appView() string {
 		mid = a.inv.View()
 	case tabSessions:
 		mid = a.sess.View()
-	case tabAudit:
-		mid = a.audit.View()
-	case tabSettings:
-		mid = a.settings.View(contentW, midH, a.themeIdx)
 	}
 	// Stretch the tab body so the status bar stays on the last terminal row
 	// even when that tab's content is shorter than the window. Clip, don't wrap.

@@ -156,36 +156,6 @@ func (a *App) updateAppKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return a.handleIntent(intent, tea.Batch(cmd, extra))
 	case tabSessions:
 		return a, a.sess.Update(msg, a.keys)
-	case tabAudit:
-		return a, a.audit.Update(msg)
-	case tabSettings:
-		prevRefresh := a.settings.autoRefresh
-		prevAlerts := a.settings.logAlerts
-		sm, scmd, intent := a.settings.Update(msg, a.themeIdx, a.styles, a.keys)
-		a.settings = sm
-		var cmds []tea.Cmd
-		if a.settings.autoRefresh != prevRefresh {
-			state := "off"
-			if a.settings.autoRefresh {
-				state = "on"
-			}
-			cmds = append(cmds, a.log("INFO", "auto-refresh "+state))
-		}
-		if a.settings.logAlerts != prevAlerts {
-			cmds = append(cmds, a.logLogAlertsState())
-		}
-		if scmd != nil {
-			a.setTheme(scmd.themeIdx)
-			cmds = append(cmds, a.log("INFO", "theme: "+Themes[a.themeIdx].Name))
-		}
-		_, intentCmd := a.handleIntent(intent, nil)
-		if intentCmd != nil {
-			cmds = append(cmds, intentCmd)
-		}
-		if len(cmds) == 0 {
-			return a, nil
-		}
-		return a, tea.Batch(cmds...)
 	}
 	return a, nil
 }
@@ -197,12 +167,6 @@ func (a *App) handleGlobal(act Action) (tea.Model, tea.Cmd) {
 		return a, a.log("INFO", "tab: "+tabName(a.tab))
 	case ActionTabSessions:
 		a.tab = tabSessions
-		return a, a.log("INFO", "tab: "+tabName(a.tab))
-	case ActionTabAudit:
-		a.tab = tabAudit
-		return a, a.log("INFO", "tab: "+tabName(a.tab))
-	case ActionTabSettings:
-		a.tab = tabSettings
 		return a, a.log("INFO", "tab: "+tabName(a.tab))
 	case ActionPalette:
 		a.overlay = overlayPalette
@@ -231,20 +195,78 @@ func (a *App) handleGlobal(act Action) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
+func (a *App) updateSidebarSettings(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch a.keys.Nav.Match(msg) {
+	case ActionPageUp:
+		a.settings.cursor = max(0, a.settings.cursor-a.sidebar.pageSize(a.styles, a.height))
+		a.revealSettingsCursor()
+		return a, nil
+	case ActionPageDown:
+		a.settings.cursor = min(a.settings.maxCursor(), a.settings.cursor+a.sidebar.pageSize(a.styles, a.height))
+		a.revealSettingsCursor()
+		return a, nil
+	}
+	cmd := a.applySettingsMsg(msg)
+	a.revealSettingsCursor()
+	return a, cmd
+}
+
+func (a *App) applySettingsMsg(msg tea.KeyPressMsg) tea.Cmd {
+	prevRefresh := a.settings.autoRefresh
+	prevAlerts := a.settings.logAlerts
+	sm, scmd, intent := a.settings.Update(msg, a.themeIdx, a.styles, a.keys)
+	a.settings = sm
+	var cmds []tea.Cmd
+	if a.settings.autoRefresh != prevRefresh {
+		state := "off"
+		if a.settings.autoRefresh {
+			state = "on"
+		}
+		cmds = append(cmds, a.log("INFO", "auto-refresh "+state))
+	}
+	if a.settings.logAlerts != prevAlerts {
+		cmds = append(cmds, a.logLogAlertsState())
+	}
+	if scmd != nil {
+		a.setTheme(scmd.themeIdx)
+		cmds = append(cmds, a.log("INFO", "theme: "+Themes[a.themeIdx].Name))
+	}
+	_, intentCmd := a.handleIntent(intent, nil)
+	if intentCmd != nil {
+		cmds = append(cmds, intentCmd)
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
+}
+
+func (a *App) revealSettingsCursor() {
+	listH := a.sidebar.listHeight(a.styles, a.height)
+	c := a.settings.cursor
+	if c < a.sidebar.scroll {
+		a.sidebar.scroll = c
+	} else if c >= a.sidebar.scroll+listH {
+		a.sidebar.scroll = c - listH + 1
+	}
+	maxScroll := a.sidebar.maxScroll(a.styles, a.height, a.logs, a.settings, a.themeIdx)
+	if a.sidebar.scroll > maxScroll {
+		a.sidebar.scroll = maxScroll
+	}
+	if a.sidebar.scroll < 0 {
+		a.sidebar.scroll = 0
+	}
+}
+
 func (a *App) jumpTop() {
 	switch a.tab {
 	case tabInventory:
 		a.inv.tbl.GotoTop()
 		a.inv.syncTableRows()
-	case tabAudit:
-		a.audit.tbl.GotoTop()
-		a.audit.syncTableRows()
 	case tabSessions:
 		if n := len(a.sess.list.Items()); n > 0 {
 			a.sess.list.Select(0)
 		}
-	case tabSettings:
-		a.settings.cursor = 0
 	}
 }
 
@@ -253,15 +275,10 @@ func (a *App) jumpBottom() {
 	case tabInventory:
 		a.inv.tbl.GotoBottom()
 		a.inv.syncTableRows()
-	case tabAudit:
-		a.audit.tbl.GotoBottom()
-		a.audit.syncTableRows()
 	case tabSessions:
 		if n := len(a.sess.list.Items()); n > 0 {
 			a.sess.list.Select(n - 1)
 		}
-	case tabSettings:
-		a.settings.cursor = a.settings.maxCursor()
 	}
 }
 
@@ -405,20 +422,25 @@ func (a *App) updateOverlay(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			a.sidebar.setTab(sidebarTabNotif)
 		case ActionSidebarLogs:
 			a.sidebar.setTab(sidebarTabLogs)
+		case ActionSidebarSettings:
+			a.sidebar.setTab(sidebarTabSettings)
+		}
+		if a.sidebar.tab == sidebarTabSettings {
+			return a.updateSidebarSettings(msg)
 		}
 		switch a.keys.Nav.Match(msg) {
 		case ActionMoveUp:
-			a.sidebar.scrollBy(-1, a.styles, a.height, a.logs)
+			a.sidebar.scrollBy(-1, a.styles, a.height, a.logs, a.settings, a.themeIdx)
 		case ActionMoveDown:
-			a.sidebar.scrollBy(1, a.styles, a.height, a.logs)
+			a.sidebar.scrollBy(1, a.styles, a.height, a.logs, a.settings, a.themeIdx)
 		case ActionPageUp:
-			a.sidebar.scrollBy(-a.sidebar.pageSize(a.styles, a.height), a.styles, a.height, a.logs)
+			a.sidebar.scrollBy(-a.sidebar.pageSize(a.styles, a.height), a.styles, a.height, a.logs, a.settings, a.themeIdx)
 		case ActionPageDown:
-			a.sidebar.scrollBy(a.sidebar.pageSize(a.styles, a.height), a.styles, a.height, a.logs)
+			a.sidebar.scrollBy(a.sidebar.pageSize(a.styles, a.height), a.styles, a.height, a.logs, a.settings, a.themeIdx)
 		case ActionJumpTop:
 			a.sidebar.scroll = 0
 		case ActionJumpBottom:
-			a.sidebar.scroll = a.sidebar.maxScroll(a.styles, a.height, a.logs)
+			a.sidebar.scroll = a.sidebar.maxScroll(a.styles, a.height, a.logs, a.settings, a.themeIdx)
 		}
 	case overlayConfirmQuit:
 		act := a.keys.Overlay.Match(msg)
@@ -454,10 +476,9 @@ func (a *App) runPaletteCommand(c command) tea.Cmd {
 		a.tab = tabInventory
 	case "sessions":
 		a.tab = tabSessions
-	case "audit":
-		a.tab = tabAudit
 	case "settings":
-		a.tab = tabSettings
+		a.overlay = overlaySidebar
+		a.sidebar.setTab(sidebarTabSettings)
 	case "aws":
 		a.inv.fProvider = "aws"
 		a.inv.recompute()

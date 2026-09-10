@@ -66,17 +66,12 @@ func (m *settingsModel) Update(msg tea.KeyPressMsg, themeIdx int, s Styles, k Ke
 	return *m, nil, appIntent{}
 }
 
-func (m *settingsModel) View(w, h int, themeIdx int) string {
-	head := m.styles.SectionHead.Render("PROVIDERS & PREFERENCES · j/k move · ⏎ toggle/cycle/reconnect")
-	return m.renderSettings(w, head, themeIdx)
-}
-
-func (m *settingsModel) renderSettings(w int, head string, themeIdx int) string {
+func (m settingsModel) sidebarBody(s Styles, innerW int, themeIdx int) string {
 	var rows []string
 	providerIDs := m.svc.GetCloudProvidersIDs()
 	for i, id := range providerIDs {
-		val, valStyle, hint := providerRowInfo(m.styles, m.svc.GetCloudProviderStatus(id))
-		rows = append(rows, settingsRow(m.styles, m.cursor == i, string(id), val, valStyle, hint))
+		val, valStyle, hint := providerRowInfo(s, m.svc.GetCloudProviderStatus(id))
+		rows = append(rows, settingsRow(s, m.cursor == i, string(id), val, valStyle, hint))
 	}
 
 	refresh := "[off]"
@@ -89,14 +84,16 @@ func (m *settingsModel) renderSettings(w int, head string, themeIdx int) string 
 	}
 	n := len(providerIDs)
 	rows = append(rows,
-		settingsRow(m.styles, m.cursor == n, "auto-refresh", refresh, m.styles.Dim, "⏎ toggle"),
-		settingsRow(m.styles, m.cursor == n+1, "log alerts", alerts, m.styles.Dim, "⏎ toggle · ctrl+shift+l"),
-		settingsRow(m.styles, m.cursor == n+2, "theme", Themes[themeIdx].Name+" (charm · stratus · mono · terminal)", m.styles.Dim, "⏎ cycle · ctrl+shift+t"),
+		settingsRow(s, m.cursor == n, "auto-refresh", refresh, s.Dim, "⏎ toggle"),
+		settingsRow(s, m.cursor == n+1, "log alerts", alerts, s.Dim, "⏎ toggle"),
+		settingsRow(s, m.cursor == n+2, "theme", Themes[themeIdx].Name, s.Dim, "⏎ cycle"),
 	)
 
-	body := head + "\n\n" + strings.Join(rows, "\n")
-	h := max(1, lipgloss.Height(body))
-	return padBlock(body, max(1, w), h)
+	out := make([]string, len(rows))
+	for i, row := range rows {
+		out[i] = clipLine(row, innerW)
+	}
+	return strings.Join(out, "\n")
 }
 
 // providerRowInfo maps a provider's live connection state to the row's
