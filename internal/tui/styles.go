@@ -56,7 +56,7 @@ func NewStyles(th Theme) Styles {
 			Foreground(th.Dim).
 			Padding(0).
 			Margin(0),
-		FilterLine: lipgloss.NewStyle().Foreground(th.Dim),
+		FilterLine: lipgloss.NewStyle().Foreground(th.Dim).Padding(1, 2, 1, 2),
 		Box:        lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(th.Border).Background(th.Surface).Padding(1, 3),
 		SidePanel:  lipgloss.NewStyle().Border(lipgloss.NormalBorder(), false, false, false, true).BorderForeground(th.Border).Background(th.Surface).Padding(0, 1),
 		Sidebar: lipgloss.NewStyle().

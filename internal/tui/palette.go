@@ -23,8 +23,8 @@ var allCommands = []command{
 	{"running", "filter state running"},
 	{"stopped", "filter state stopped"},
 	{"region", "region <name>"},
-	{"tag", "tag <k:v>"},
-	{"clear", "clear all filters"},
+	{"tag", "tag filter: tag=key:value in the query bar"},
+	{"clear", "clear inventory query"},
 	{"connect", "connect to selection"},
 	{"start", "start selection"},
 	{"stop", "stop selection"},
@@ -34,6 +34,7 @@ var allCommands = []command{
 	{"logs", "toggle log alerts"},
 	{"sidebar", "toggle sidebar"},
 	{"help", "show help"},
+	{"query-help", "inventory query help"},
 	{"quit", "sign out"},
 }
 

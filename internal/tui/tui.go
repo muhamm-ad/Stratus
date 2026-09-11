@@ -65,9 +65,6 @@ type App struct {
 	alert    bubbleup.AlertModel
 	identity core.IdentityProvider
 
-	searchMode bool
-	searchBuf  string
-
 	loggedUserLabel string
 
 	lastG time.Time // for multi-key "gg"
@@ -374,7 +371,6 @@ func (a *App) View() tea.View {
 	// Ask the terminal to report modifiers (ctrl+shift+t vs ctrl+t).
 	v.KeyboardEnhancements.ReportAllKeysAsEscapeCodes = true
 	v.KeyboardEnhancements.ReportAlternateKeys = true
-	// v.MouseMode = tea.MouseModeAllMotion
 	return v
 }
 

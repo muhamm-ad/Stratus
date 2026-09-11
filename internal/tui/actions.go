@@ -41,6 +41,7 @@ const (
 
 	// Inventory
 	ActionSearch
+	ActionQueryHelp
 	ActionMark
 	ActionMarkAll
 	ActionConnect
@@ -93,6 +94,7 @@ const (
 	HitSelect          HitID = "nav.select"
 	HitBack            HitID = "nav.back"
 	HitSearch          HitID = "inventory.search"
+	HitQueryHelp       HitID = "inventory.queryHelp"
 	HitMark            HitID = "inventory.mark"
 	HitMarkAll         HitID = "inventory.markAll"
 	HitConnect         HitID = "inventory.connect"

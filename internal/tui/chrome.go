@@ -173,7 +173,7 @@ func (a *App) bottomChromeView() string {
 	left := a.styles.Dim.Render(a.statusLeftView())
 	row := clipLine(left, w)
 	if a.overlay != overlaySidebar {
-		avail := max(0, w-lipgloss.Width(left))
+		avail := max(0, w-lipgloss.Width(left)-6)
 		row = joinClipRow(left, a.statusRightView(avail), w)
 	}
 	return boxNoWrap(a.styles.StatusBar.UnsetForeground(), row, w, 1)

@@ -18,6 +18,7 @@ type helpCategory struct {
 
 type helpModel struct {
 	scroll int
+	query  bool // filter/query panel instead of the app help
 }
 
 func newHelpModel() helpModel { return helpModel{} }
@@ -64,13 +65,7 @@ func helpCategories(k KeyMap) []helpCategory {
 				helpEntryFrom(k.Inventory.Connect, "connect to selection"),
 				helpEntryFrom(k.Inventory.Start, "start selection"),
 				helpEntryFrom(k.Inventory.Stop, "stop selection"),
-				helpEntryFrom(k.Inventory.Search, "filter by name"),
-				helpEntryFrom(k.Inventory.SortKey, "cycle sort column"),
-				helpEntryFrom(k.Inventory.SortDir, "reverse sort"),
-				helpEntryFrom(k.Inventory.FilterProv, "cycle provider"),
-				helpEntryFrom(k.Inventory.FilterState, "cycle state"),
-				helpEntryFrom(k.Inventory.FilterRegion, "cycle region"),
-				helpEntryFrom(k.Inventory.ClearFilters, "clear filters"),
+				helpEntryFrom(k.Inventory.QueryHelp, "query / filter help"),
 				helpEntryFrom(k.Inventory.Refresh, "refresh inventory"),
 				helpEntryFrom(k.Global.Reconnect, "reconnect expired provider"),
 			},
@@ -87,9 +82,122 @@ func helpCategories(k KeyMap) []helpCategory {
 	}
 }
 
+func queryHelpCategories(k KeyMap) []helpCategory {
+	return []helpCategory{
+		{
+			title: "The bar",
+			entries: []helpEntry{
+				helpEntryFrom(k.Inventory.Search, "focus the query bar"),
+				{keys: "type", desc: "results update as you type"},
+				{keys: "esc / ⏎", desc: "return focus to the table; the query stays"},
+				{keys: "?", desc: "this panel (also while the bar is focused)"},
+				{keys: "count", desc: "right side is matching / loaded"},
+			},
+		},
+		{
+			title: "Search",
+			entries: []helpEntry{
+				{keys: "text", desc: "substring AND, case-insensitive"},
+				{keys: "haystack", desc: "name, id, provider, region, type, state"},
+				{keys: "web prod", desc: "contains web AND contains prod"},
+				{keys: `"web api"`, desc: "quoted token keeps spaces"},
+				{keys: "us-east", desc: "partial; matches us-east-1"},
+			},
+		},
+		{
+			title: "Filters",
+			entries: []helpEntry{
+				{keys: "field=value", desc: "exact match, case-insensitive"},
+				{keys: "field = value", desc: "spaces around = are allowed"},
+				{keys: "p=aws s=running", desc: "different fields AND"},
+				{keys: "p=aws p=gcp", desc: "same field OR"},
+				{keys: "region=us", desc: "does not match us-east-1 (use search)"},
+				{keys: "foo=bar", desc: "unknown field is search, not a filter"},
+				{keys: "tag=key:value", desc: "exact tag key and value"},
+			},
+		},
+		{
+			title: "Sort",
+			entries: []helpEntry{
+				{keys: "name+", desc: "ascending (preferred)"},
+				{keys: "name-", desc: "descending (preferred)"},
+				{keys: "+name / -name", desc: "prefix form, also accepted"},
+				{keys: "name:asc", desc: "ascending"},
+				{keys: "name:desc", desc: "descending"},
+				{keys: "last token", desc: "exactly one sort; last sort wins"},
+				{keys: "columns", desc: "any field except tag, plus aliases"},
+				{keys: "(none)", desc: "keep load order (stable)"},
+			},
+		},
+		{
+			title: "Fields",
+			entries: []helpEntry{
+				{keys: "n / name", desc: "VM name"},
+				{keys: "p / provider", desc: "aws, azure, gcp, …"},
+				{keys: "r / region", desc: "provider region id"},
+				{keys: "t / type", desc: "machine type / size"},
+				{keys: "s / state", desc: "running, stopped, starting, stopping, unknown"},
+				{keys: "id", desc: "provider instance id"},
+				{keys: "tag", desc: "tag=key:value only; not sortable"},
+			},
+		},
+		{
+			title: "Shortcuts",
+			entries: []helpEntry{
+				helpEntryFrom(k.Inventory.Search, "focus query bar"),
+				helpEntryFrom(k.Inventory.FilterProv, "cycle provider=, then off"),
+				helpEntryFrom(k.Inventory.FilterState, "cycle state= running → … → off"),
+				helpEntryFrom(k.Inventory.FilterRegion, "cycle region= in loaded inventory"),
+				helpEntryFrom(k.Inventory.SortKey, "cycle sort name → provider → region → type → state → off"),
+				helpEntryFrom(k.Inventory.SortDir, "flip sort direction"),
+				helpEntryFrom(k.Inventory.ClearFilters, "clear the whole query"),
+				{keys: "table", desc: "shortcuts fire only while the table is focused"},
+			},
+		},
+		{
+			title: "Palette",
+			entries: []helpEntry{
+				{keys: ":", desc: "open the command palette"},
+				{keys: "aws azure gcp", desc: "set provider="},
+				{keys: "all", desc: "clear provider filter"},
+				{keys: "running stopped", desc: "set state="},
+				{keys: "region", desc: "cycle region= (same as r)"},
+				{keys: "clear", desc: "clear the whole query"},
+			},
+		},
+		{
+			title: "Examples",
+			entries: []helpEntry{
+				{keys: "web", desc: "name/id/… contains web"},
+				{keys: "p=aws", desc: "provider is aws"},
+				{keys: "p=aws web", desc: "aws AND search web"},
+				{keys: "provider=aws name-", desc: "aws, sort name descending"},
+				{keys: "web p=gcp region+", desc: "search web, gcp, sort region asc"},
+				{keys: "name:desc", desc: "sort name descending"},
+				{keys: "api p=aws s=running name+", desc: "search, filters, sort name"},
+			},
+		},
+	}
+}
+
+func (m helpModel) title() string {
+	if m.query {
+		return "Filter help"
+	}
+	return "Help"
+}
+
+func (m helpModel) categories(k KeyMap) []helpCategory {
+	if m.query {
+		return queryHelpCategories(k)
+	}
+	return helpCategories(k)
+}
+
 func (m helpModel) View(s Styles, k KeyMap, w, h int) string {
-	stacked := helpShouldStack(s, k, w)
-	body := helpBody(s, k, stacked)
+	cats := m.categories(k)
+	stacked := helpShouldStack(s, cats, w)
+	body := helpBody(s, cats, stacked)
 	bodyLines := strings.Split(body, "\n")
 	bodyH := helpBodyHeight(s, h)
 	scrollable := len(bodyLines) > bodyH
@@ -100,7 +208,7 @@ func (m helpModel) View(s Styles, k KeyMap, w, h int) string {
 		footer = k.Nav.Up.Keys.Help().Key + " " + keyed(k.Nav.Down, "scroll") + " · " + keyed(k.Nav.Esc, "close")
 	}
 
-	title := s.DialogTitle.Render("Help")
+	title := s.DialogTitle.Render(m.title())
 	footerView := s.DialogKey.Render(strings.TrimSpace(footer))
 	maxW := max(20, w-2)
 	maxH := max(8, h-2)
@@ -126,17 +234,16 @@ func (m helpModel) View(s Styles, k KeyMap, w, h int) string {
 	))
 }
 
-func helpShouldStack(s Styles, k KeyMap, w int) bool {
-	twoCol := helpBody(s, k, false)
+func helpShouldStack(s Styles, cats []helpCategory, w int) bool {
+	twoCol := helpBody(s, cats, false)
 	return lipgloss.Width(twoCol)+scrollbarCols+s.Dialog.GetHorizontalFrameSize() > w
 }
 
-func helpBody(s Styles, k KeyMap, stacked bool) string {
-	cats := helpCategories(k)
-	if stacked {
+func helpBody(s Styles, cats []helpCategory, stacked bool) string {
+	if stacked || len(cats) < 2 {
 		return renderHelpColumn(s, cats)
 	}
-	mid := 3 //len(cats) / 2
+	mid := (len(cats) + 1) / 2
 	left := renderHelpColumn(s, cats[:mid])
 	right := renderHelpColumn(s, cats[mid:])
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, "    ", right)
@@ -151,7 +258,8 @@ func helpBodyHeight(s Styles, h int) int {
 }
 
 func (m *helpModel) maxScroll(s Styles, k KeyMap, w, h int) int {
-	lines := lipgloss.Height(helpBody(s, k, helpShouldStack(s, k, w)))
+	cats := m.categories(k)
+	lines := lipgloss.Height(helpBody(s, cats, helpShouldStack(s, cats, w)))
 	return max(0, lines-helpBodyHeight(s, h))
 }
 

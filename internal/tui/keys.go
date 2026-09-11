@@ -101,7 +101,7 @@ func (k KeyMap) StatusHint(t tab) string {
 // Global
 // ---------------------------------------------------------------------------
 
-// GlobalMap is always active on the app screen (not while typing search).
+// GlobalMap is always active on the app screen (not while the query bar is focused).
 type GlobalMap struct {
 	Help, Palette, Theme, Logs Binding
 	Sidebar                    Binding
@@ -112,7 +112,7 @@ type GlobalMap struct {
 
 func defaultGlobalKeys() GlobalMap {
 	return GlobalMap{
-		Help:         bind(ActionHelp, HitHelp, "ctrl+h/?", "help", "ctrl+h", "?"),
+		Help:         bind(ActionHelp, HitHelp, "ctrl+h", "help", "ctrl+h", "?"),
 		Palette:      bind(ActionPalette, HitPalette, ":", "cmd", ":"),
 		Theme:        bind(ActionTheme, HitTheme, "ctrl+shift+t", "theme", "ctrl+shift+t"),
 		Logs:         bind(ActionLogs, HitLogs, "ctrl+shift+l", "log alerts", "ctrl+shift+l"),
@@ -247,7 +247,7 @@ func (s SidebarMap) MatchMouse(button tea.MouseButton, hit HitID) Action {
 
 // InventoryMap is only matched on the inventory tab.
 type InventoryMap struct {
-	Search, Mark, MarkAll                 Binding
+	Search, QueryHelp, Mark, MarkAll      Binding
 	Connect, Start, Stop                  Binding
 	FilterProv, FilterState, FilterRegion Binding
 	SortKey, SortDir, ClearFilters        Binding
@@ -256,7 +256,8 @@ type InventoryMap struct {
 
 func defaultInventoryKeys() InventoryMap {
 	return InventoryMap{
-		Search:       bind(ActionSearch, HitSearch, "/", "filter", "/"),
+		Search:       bind(ActionSearch, HitSearch, "/", "query", "/"),
+		QueryHelp:    bind(ActionQueryHelp, HitQueryHelp, "?", "query help", "?"),
 		Mark:         bind(ActionMark, HitMark, "s", "mark", "s"),
 		MarkAll:      bind(ActionMarkAll, HitMarkAll, "a", "mark all/none", "a"),
 		Connect:      bind(ActionConnect, HitConnect, "c", "connect", "c"),
@@ -274,7 +275,7 @@ func defaultInventoryKeys() InventoryMap {
 
 func (m InventoryMap) Bindings() []Binding {
 	return []Binding{
-		m.Search, m.Mark, m.MarkAll, m.Connect, m.Start, m.Stop,
+		m.Search, m.QueryHelp, m.Mark, m.MarkAll, m.Connect, m.Start, m.Stop,
 		m.FilterProv, m.FilterState, m.FilterRegion,
 		m.SortKey, m.SortDir, m.ClearFilters, m.Refresh,
 	}

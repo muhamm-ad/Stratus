@@ -57,27 +57,13 @@ func (a *App) logLogAlertsState() tea.Cmd {
 }
 
 func (a *App) updateAppKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if a.searchMode {
-		switch a.keys.Nav.Match(msg) {
-		case ActionSelect:
-			a.searchMode = false
-			a.inv.query = a.searchBuf
-			a.inv.recompute()
-			return a, a.log("INFO", "search: "+a.inv.query)
-		case ActionBack:
-			a.searchMode = false
-			return a, a.log("INFO", "search cancelled")
-		}
-		if msg.String() == "backspace" {
-			if len(a.searchBuf) > 0 {
-				a.searchBuf = a.searchBuf[:len(a.searchBuf)-1]
-			}
-			return a, nil
-		}
-		if keyStr := msg.String(); len(keyStr) == 1 {
-			a.searchBuf += keyStr
-		}
-		return a, nil
+	if a.tab == tabInventory && a.inv.QueryFocused() {
+		return a.updateInventoryKeys(msg)
+	}
+
+	// Inventory steals "?" for filter help; ctrl+h still opens app help.
+	if a.tab == tabInventory && a.keys.Inventory.Match(msg) == ActionQueryHelp {
+		return a, a.openQueryHelp()
 	}
 
 	// "gg" is a two-stroke gesture; a lone "g" must not jump yet.
@@ -106,58 +92,59 @@ func (a *App) updateAppKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	switch a.tab {
 	case tabInventory:
-		if a.keys.Inventory.Match(msg) == ActionSearch {
-			a.searchMode = true
-			a.searchBuf = ""
-			return a, a.log("INFO", "search opened")
-		}
-		prevProv, prevState, prevRegion := a.inv.fProvider, a.inv.fState, a.inv.fRegion
-		prevSort, prevAsc, prevDetail := a.inv.sortK, a.inv.sortAsc, a.inv.detailOn
-		m, cmd, intent := a.inv.Update(msg, a.keys, a.styles)
-		a.inv = m
-		var extra tea.Cmd
-		switch {
-		case a.inv.fProvider != prevProv:
-			val := string(a.inv.fProvider)
-			if val == "" {
-				val = "all"
-			}
-			extra = a.log("INFO", "filter provider: "+val)
-		case a.inv.fState != prevState:
-			val := string(a.inv.fState)
-			if val == "" {
-				val = "all"
-			}
-			extra = a.log("INFO", "filter state: "+val)
-		case a.inv.fRegion != prevRegion:
-			val := string(a.inv.fRegion)
-			if val == "" {
-				val = "all"
-			}
-			extra = a.log("INFO", "filter region: "+val)
-		case a.inv.sortK != prevSort || a.inv.sortAsc != prevAsc:
-			dir := "desc"
-			if a.inv.sortAsc {
-				dir = "asc"
-			}
-			names := [...]string{"none", "name", "provider", "region", "type", "state"}
-			name := "none"
-			if int(a.inv.sortK) < len(names) {
-				name = names[int(a.inv.sortK)]
-			}
-			extra = a.log("INFO", "sort: "+name+" "+dir)
-		case a.inv.detailOn != prevDetail:
-			if a.inv.detailOn {
-				extra = a.log("INFO", "vm detail opened")
-			} else {
-				extra = a.log("INFO", "vm detail closed")
-			}
-		}
-		return a.handleIntent(intent, tea.Batch(cmd, extra))
+		return a.updateInventoryKeys(msg)
 	case tabSessions:
 		return a, a.sess.Update(msg, a.keys)
 	}
 	return a, nil
+}
+
+func (a *App) updateInventoryKeys(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	prevQ := a.inv.QueryString()
+	prevFocus := a.inv.QueryFocused()
+	prevDetail := a.inv.detailOn
+	m, cmd, intent := a.inv.Update(msg, a.keys, a.styles)
+	a.inv = m
+	var extra tea.Cmd
+	switch {
+	case !prevFocus && a.inv.QueryFocused():
+		extra = a.log("INFO", "query opened")
+	case prevFocus && !a.inv.QueryFocused():
+		q := a.inv.QueryString()
+		if q == "" {
+			extra = a.log("INFO", "query closed")
+		} else {
+			extra = a.log("INFO", "query: "+q)
+		}
+	case !a.inv.QueryFocused() && a.inv.QueryString() != prevQ:
+		q := a.inv.QueryString()
+		if q == "" {
+			extra = a.log("INFO", "query cleared")
+		} else {
+			extra = a.log("INFO", "query: "+q)
+		}
+	case a.inv.detailOn != prevDetail:
+		if a.inv.detailOn {
+			extra = a.log("INFO", "vm detail opened")
+		} else {
+			extra = a.log("INFO", "vm detail closed")
+		}
+	}
+	return a.handleIntent(intent, tea.Batch(cmd, extra))
+}
+
+func (a *App) openHelp() tea.Cmd {
+	a.overlay = overlayHelp
+	a.help.query = false
+	a.help.scroll = 0
+	return a.log("INFO", "help")
+}
+
+func (a *App) openQueryHelp() tea.Cmd {
+	a.overlay = overlayHelp
+	a.help.query = true
+	a.help.scroll = 0
+	return a.log("INFO", "query help")
 }
 
 func (a *App) handleGlobal(act Action) (tea.Model, tea.Cmd) {
@@ -172,9 +159,7 @@ func (a *App) handleGlobal(act Action) (tea.Model, tea.Cmd) {
 		a.overlay = overlayPalette
 		return a, tea.Batch(a.cmdPalette.open(), a.log("INFO", "command palette"))
 	case ActionHelp:
-		a.overlay = overlayHelp
-		a.help.scroll = 0
-		return a, a.log("INFO", "help")
+		return a, a.openHelp()
 	case ActionLogs:
 		return a, a.toggleLogAlerts()
 	case ActionSidebar:
@@ -304,6 +289,8 @@ func (a *App) handleIntent(intent appIntent, cmd tea.Cmd) (tea.Model, tea.Cmd) {
 	case intentReconnect:
 		cmds = append(cmds, a.log("INFO", "reconnect "+intent.provider))
 		cmds = append(cmds, a.reconnectProviderCmd(core.CloudProviderID(intent.provider)))
+	case intentQueryHelp:
+		cmds = append(cmds, a.openQueryHelp())
 	}
 	if len(cmds) == 0 {
 		return a, nil
@@ -377,6 +364,9 @@ func (a *App) delegate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.login.spinner, cmd = a.login.spinner.Update(msg)
 		return a, cmd
 	}
+	if cmd := a.inv.HandleMsg(msg); cmd != nil {
+		return a, cmd
+	}
 	return a, nil
 }
 
@@ -397,6 +387,7 @@ func (a *App) updateOverlay(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if a.keys.Global.Match(msg) == ActionHelp || a.keys.Nav.Match(msg) == ActionBack {
 			a.overlay = overlayNone
 			a.help.scroll = 0
+			a.help.query = false
 			return a, a.log("INFO", "overlay closed")
 		}
 		switch a.keys.Nav.Match(msg) {
@@ -482,26 +473,19 @@ func (a *App) runPaletteCommand(c command) tea.Cmd {
 		a.overlay = overlaySidebar
 		a.sidebar.setTab(sidebarTabSettings)
 	case "aws":
-		a.inv.fProvider = "aws"
-		a.inv.recompute()
+		a.inv.applyProvider("aws")
 	case "azure":
-		a.inv.fProvider = "azure"
-		a.inv.recompute()
+		a.inv.applyProvider("azure")
 	case "gcp":
-		a.inv.fProvider = "gcp"
-		a.inv.recompute()
+		a.inv.applyProvider("gcp")
 	case "all":
-		a.inv.fProvider = ""
-		a.inv.recompute()
+		a.inv.applyProvider("")
 	case "running":
-		a.inv.fState = "running"
-		a.inv.recompute()
+		a.inv.applyState("running")
 	case "stopped":
-		a.inv.fState = "stopped"
-		a.inv.recompute()
+		a.inv.applyState("stopped")
 	case "clear":
 		a.inv.clearFilters()
-		a.inv.recompute()
 	case "connect":
 		_, cmd := a.handleIntent(appIntent{kind: intentConnect, targets: a.inv.selectedVMs()}, nil)
 		return cmd
@@ -520,8 +504,9 @@ func (a *App) runPaletteCommand(c command) tea.Cmd {
 		a.overlay = overlaySidebar
 		a.seeNotifsIfVisible()
 	case "help":
-		a.overlay = overlayHelp
-		a.help.scroll = 0
+		return a.openHelp()
+	case "query-help":
+		return a.openQueryHelp()
 	case "theme":
 		a.setTheme((a.themeIdx + 1) % len(Themes))
 	case "quit":
@@ -531,9 +516,8 @@ func (a *App) runPaletteCommand(c command) tea.Cmd {
 		return a.reconnectExpiredCmd()
 	case "region":
 		a.inv.cycleRegion()
-		a.inv.recompute()
 	case "tag":
-		return a.log("WARN", "tag filter not yet implemented")
+		return a.log("INFO", "tag filter: type tag=key:value in the query bar")
 	}
 	return nil
 }
