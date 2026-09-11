@@ -14,7 +14,7 @@ const (
 	quitBtnCancel = 1
 	quitBtnGap    = 2
 
-	minAppWidth  = 95
+	minAppWidth  = 100
 	minAppHeight = 30
 )
 

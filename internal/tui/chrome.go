@@ -126,7 +126,7 @@ func (a *App) unreadNotifView() string {
 	return a.styles.Accent.Render(itoa(n) + " " + label)
 }
 
-func (a *App) statusRightView() string {
+func (a *App) statusRightView(maxW int) string {
 	ids := a.svc.GetCloudProvidersIDs()
 	busy := false
 	for _, cp := range ids {
@@ -136,26 +136,36 @@ func (a *App) statusRightView() string {
 		}
 	}
 
-	parts := []string{}
-	if badge := a.unreadNotifView(); badge != "" {
-		parts = append(parts, badge)
-	}
-
-	sync := "✓ synced"
+	sync := a.styles.Dim.Render("✓ synced")
 	if busy {
-		sync = "syncing…"
+		sync = a.styles.Dim.Render("syncing…")
 	}
-	parts = append(parts, a.styles.Dim.Render(sync))
+	badge := a.unreadNotifView()
+	pills := a.providerPillsView()
+	user := a.loggedUserLabel
 
-	if pills := a.providerPillsView(); pills != "" {
-		parts = append(parts, pills)
+	full := joinStatusParts(a.styles, badge, sync, pills, user)
+	if maxW < 1 {
+		return joinStatusParts(a.styles, badge, sync)
 	}
-
-	if a.loggedUserLabel != "" {
-		parts = append(parts, a.loggedUserLabel)
+	if lipgloss.Width(full) <= maxW {
+		return full
 	}
+	withoutUser := joinStatusParts(a.styles, badge, sync, pills)
+	if lipgloss.Width(withoutUser) <= maxW {
+		return withoutUser
+	}
+	return joinStatusParts(a.styles, badge, sync)
+}
 
-	return strings.Join(parts, a.styles.Dim.Render(" · "))
+func joinStatusParts(s Styles, parts ...string) string {
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return strings.Join(out, s.Dim.Render(" · "))
 }
 
 func (a *App) bottomChromeView() string {
@@ -163,7 +173,8 @@ func (a *App) bottomChromeView() string {
 	left := a.styles.Dim.Render(a.statusLeftView())
 	row := clipLine(left, w)
 	if a.overlay != overlaySidebar {
-		row = joinClipRow(left, a.statusRightView(), w)
+		avail := max(0, w-lipgloss.Width(left))
+		row = joinClipRow(left, a.statusRightView(avail), w)
 	}
 	return boxNoWrap(a.styles.StatusBar.UnsetForeground(), row, w, 1)
 }
