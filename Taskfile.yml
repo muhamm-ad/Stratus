@@ -3,13 +3,13 @@ version: "3"
 tasks:
   dev:
     desc: Launch the application in development mode (hot reload)
-    dir: src
+    dir: cmd/gui
     cmds:
       - wails dev
 
   build:
     desc: Build the desktop binary
-    dir: src
+    dir: cmd/gui
     cmds:
       - wails build
 

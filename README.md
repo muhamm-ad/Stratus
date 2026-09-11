@@ -13,6 +13,9 @@
 
 </div>
 
+> [!WARNING]
+> The documentation may be outdated since the project is still in development.
+
 ---
 
 ## Overview
@@ -27,92 +30,19 @@ Stratus is a desktop application (Linux, macOS, Windows) shipped as a single bin
 - Aggregated VM inventory, filtered by each platform's RBAC: you only see what you are allowed to see.
 - One-click connection, no SSH key to manage: SSM Session Manager (AWS), Bastion or SSH (Azure), IAP (GCP).
 - Filtering and search by provider, region, state and tag.
-- Local audit log of launched connections.
-- Command-line mode for scripts and automation.
 
 ## Architecture
 
-Stratus separates a UI-independent core, connectors (one per provider, each implementing a common `CloudProvider` interface), and two frontends: the Wails graphical interface and the CLI. VM discovery goes through the official cloud SDKs; connection is delegated to the providers' native CLIs. The full detail is in [`docs/requirements-specification.md`](docs/requirements-specification.md).
+Stratus separates a UI-independent core, connectors (one per provider, each implementing a common `CloudProvider` interface), and two frontends: the Wails graphical interface and the terminal UI. VM discovery goes through the official cloud SDKs; connection is delegated to the providers. The full detail is in [`docs/architecture.md`](docs/architecture.md).
 
-## Prerequisites
-
-Go 1.25+, Node.js 20+, Git, the Wails CLI. The full procedure is in [`docs/getting-started.md`](docs/getting-started.md).
-
-## Quick start
-
-### Clone the repository
+## Install
 
 ```bash
-git clone https://github.com/muhamm-ad/stratus.git
-cd stratus
+go install github.com/muhamm-ad/stratus/cmd/tui@<version>
+go install github.com/muhamm-ad/stratus/cmd/gui@<version>
 ```
 
-### Install dependencies
-
-```bash
-go mod tidy
-```
-
-### Using the TUI
-
-```bash
-# From the Stratus repo root
-go run cmd/tui/main.go
-```
-
-### Using the Application
-
-#### Frontend submodule
-
-The React UI lives in a separate repository and is linked into this project as a Git submodule at `frontend/`. It tracks the **`master`** branch of [Stratus-FrontEnd](https://github.com/muhamm-ad/Stratus-FrontEnd).
-
-**Initialize after clone**
-
-```bash
-# From the Stratus repo root
-git submodule update --init --recursive
-```
-
-**Clone with submodules**
-
-```bash
-git clone --recurse-submodules https://github.com/muhamm-ad/stratus.git
-```
-
-**Update to the latest `master`**
-
-```bash
-git submodule update --remote frontend
-git add frontend
-git commit -m "chore(frontend): bump submodule"
-```
-
-Install frontend dependencies before running or building the desktop app:
-
-```bash
-cd frontend && npm install && cd ..
-```
-
-#### Run in development mode (hot reload)
-
-```bash
-wails dev
-```
-
-To build the production binary: `wails build` (or `task build`).
-
-## Repository structure
-
-```text
-├── cmd/           # command-line interface
-├── configs/       # configuration files
-├── internal/      # Go module
-├── scripts/       # scripts
-├── frontend/      # React + TypeScript interface (submodule)
-├── docs/          # documentation
-├── website/       # website (submodule in progress)
-└── README.md      # this file
-```
+Replace `<version>` with a tagged release (for example `v1.0.0`) or `latest`. Requires [Go](https://go.dev/dl/).
 
 ## Contributing
 

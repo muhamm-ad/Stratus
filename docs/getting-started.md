@@ -1,3 +1,3 @@
 # Getting Started
 
-FIXME: Write this.
+FIXME: Write the getting started documentation.
