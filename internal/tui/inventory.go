@@ -85,7 +85,7 @@ func flexNameWidth(tableW, nCols, fixedContent int) int {
 func fullTableColumns(w int) []table.Column {
 	fixed := invColCheck + invColProvider + invColRegion + invColType + invColState
 	return []table.Column{
-		{Title: "", Width: invColCheck}, // ✓
+		{Title: "", Width: invColCheck}, // ○ / ●
 		{Title: "NAME", Width: flexNameWidth(w, 6, fixed)},
 		{Title: "PROVIDER", Width: invColProvider},
 		{Title: "REGION", Width: invColRegion},
@@ -100,7 +100,7 @@ func fullTableColumns(w int) []table.Column {
 func narrowTableColumns(w int) []table.Column {
 	fixed := invColCheck + invColProvider + invColState
 	return []table.Column{
-		{Title: "", Width: invColCheck}, // ✓
+		{Title: "", Width: invColCheck}, // ○ / ●
 		{Title: "NAME", Width: flexNameWidth(w, 4, fixed)},
 		{Title: "PROVIDER", Width: invColProvider},
 		{Title: "STATE", Width: invColState},
@@ -127,7 +127,8 @@ func vimTableKeyMap() table.KeyMap {
 
 func setTableStyles(s Styles) table.Styles {
 	style := table.DefaultStyles()
-	style.Header = s.SectionHead.BorderBottom(true).Padding(0, 1)
+	// style.Header = s.SectionHead.BorderBottom(true).Padding(0, 1)
+	style.Header = s.SectionHead.BorderBottom(true).Padding(0, 1).MarginTop(1)
 	style.Cell = lipgloss.NewStyle().Padding(0, 1)
 	// Full-row selection style from bubbles table, themed with Accent.
 	style.Selected = lipgloss.NewStyle().
@@ -218,12 +219,15 @@ func (m *inventoryModel) syncTableRows() {
 }
 
 func (m inventoryModel) vmToRow(vm core.VM, selected bool) table.Row {
-	check := " "
+	check := "○"
 	if m.marked[vm.ID] {
-		if selected {
-			check = "✓"
+		check = "●"
+	}
+	if !selected {
+		if m.marked[vm.ID] {
+			check = m.styles.Accent.Render(check)
 		} else {
-			check = m.styles.OK.Render("✓")
+			check = m.styles.Dim.Render(check)
 		}
 	}
 	cloudProvider := string(vm.Provider)
@@ -328,15 +332,15 @@ func stateGlyph(s Styles, st core.VMState, selected bool) string {
 	var label string
 	switch st {
 	case core.StateRunning:
-		label = "● running"
+		label = "running"
 	case core.StateStopped:
-		label = "○ stopped"
+		label = "stopped"
 	case core.StateStarting:
-		label = "◐ starting"
+		label = "starting"
 	case core.StateStopping:
-		label = "◑ stopping"
+		label = "stopping"
 	default:
-		label = "◌ unknown"
+		label = "unknown"
 	}
 
 	if !selected {

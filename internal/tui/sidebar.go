@@ -24,6 +24,7 @@ const notifIconGap = "  "
 
 type notifEntry struct {
 	ts, key, msg string
+	unread       bool
 }
 
 type notifPane struct {
@@ -38,16 +39,33 @@ func (n *notifPane) add(key, msg string) bool {
 		if e.msg == msg {
 			e.ts = now
 			e.key = key
+			e.unread = true
 			n.entries = append(n.entries[:i], n.entries[i+1:]...)
 			n.entries = append([]notifEntry{e}, n.entries...)
 			return false
 		}
 	}
-	n.entries = append([]notifEntry{{ts: now, key: key, msg: msg}}, n.entries...)
+	n.entries = append([]notifEntry{{ts: now, key: key, msg: msg, unread: true}}, n.entries...)
 	if len(n.entries) > maxLogEntries {
 		n.entries = n.entries[:maxLogEntries]
 	}
 	return true
+}
+
+func (n *notifPane) unreadCount() int {
+	c := 0
+	for _, e := range n.entries {
+		if e.unread {
+			c++
+		}
+	}
+	return c
+}
+
+func (n *notifPane) markAllRead() {
+	for i := range n.entries {
+		n.entries[i].unread = false
+	}
 }
 
 type sidebarModel struct {
@@ -58,12 +76,8 @@ type sidebarModel struct {
 
 func newSidebarModel() sidebarModel { return sidebarModel{} }
 
-func sidebarHandleView(s Styles, open bool) string {
-	glyph := "◀"
-	if open {
-		glyph = "▶"
-	}
-	return s.Handle.Render(glyph)
+func sidebarHandleView(s Styles) string {
+	return s.TabInactive.Align(lipgloss.Center).Render("│◀")
 }
 
 func (m *sidebarModel) setTab(t sidebarTab) {
@@ -82,7 +96,7 @@ func (m sidebarModel) View(s Styles, k KeyMap, h int, logs logPane, settings set
 
 	tabs := m.tabRow(s, innerW)
 	footer := sidebarFooter(s, k, innerW)
-	listH := max(1, innerH-lipgloss.Height(tabs)-lipgloss.Height(footer))
+	listH := max(1, innerH-blockHeight(tabs)-blockHeight(footer))
 
 	body := m.listBody(s, logs, settings, themeIdx, innerW)
 	bodyLines := strings.Split(body, "\n")
@@ -100,13 +114,11 @@ func (m sidebarModel) View(s Styles, k KeyMap, h int, logs logPane, settings set
 		if m.tab == sidebarTabLogs {
 			empty = "no logs yet"
 		}
-		body = padBlock(s.DialogKey.Render(empty), innerW, listH)
-	} else {
-		body = padBlock(body, innerW, listH)
+		body = s.DialogKey.Render(empty)
 	}
 
-	inner := lipgloss.JoinVertical(lipgloss.Left, tabs, body, footer)
-	return boxNoWrap(s.Sidebar, inner, panelW, h)
+	inner := stackTopMidBottom(tabs, body, footer, innerW, innerH)
+	return boxNoWrap(s.Sidebar.PaddingBottom(0).MarginBottom(0), inner, panelW, h)
 }
 
 func (m sidebarModel) tabRow(s Styles, innerW int) string {
@@ -145,7 +157,7 @@ func sidebarTabFill(s Styles, innerW int, tabs ...string) string {
 
 func sidebarFooter(s Styles, k KeyMap, innerW int) string {
 	hint := keyed(k.Nav.Esc, "") + " or " + keyed(k.Global.Sidebar, "") + " to hide"
-	return s.DialogKey.PaddingTop(1).Render(clipLine(hint, innerW))
+	return s.DialogKey.Padding(0).Margin(0).Render(clipLine(hint, innerW))
 }
 
 func sidebarTabStyle(s Styles, active bool) lipgloss.Style {
@@ -177,6 +189,8 @@ func (m sidebarModel) listBody(s Styles, logs logPane, settings settingsModel, t
 		for _, e := range m.notifs.entries {
 			rows = append(rows, formatNotifBlock(s, e, innerW))
 		}
+		// rule := s.Dim.Render(strings.Repeat("─", max(1, innerW)))
+		// return strings.Join(rows, "\n"+rule+"\n")
 		return strings.Join(rows, "\n")
 	}
 }
@@ -230,8 +244,8 @@ func sidebarInnerWidth(s Styles) int {
 func (m sidebarModel) listHeight(s Styles, h int) int {
 	innerW := sidebarInnerWidth(s)
 	innerH := max(1, max(1, h)-s.Sidebar.GetVerticalFrameSize())
-	footerH := lipgloss.Height(s.DialogKey.PaddingTop(1).Render("hint"))
-	return max(1, innerH-lipgloss.Height(m.tabRow(s, innerW))-footerH)
+	footerH := blockHeight(s.DialogKey.Render("hint"))
+	return max(1, innerH-blockHeight(m.tabRow(s, innerW))-footerH)
 }
 
 func (m sidebarModel) bodyLineCount(s Styles, logs logPane, settings settingsModel, themeIdx int) int {

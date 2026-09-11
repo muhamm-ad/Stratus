@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -16,7 +15,7 @@ func (a *App) propagateSize() {
 }
 
 func (a *App) contentHeight() int {
-	h := a.layoutHeight() - lipgloss.Height(a.topChromeView()) - lipgloss.Height(a.bottomChromeView())
+	h := a.layoutHeight() - blockHeight(a.topChromeView()) - blockHeight(a.bottomChromeView())
 	if h < 1 {
 		return 1
 	}
@@ -26,30 +25,35 @@ func (a *App) contentHeight() int {
 func (a *App) topChromeView() string {
 	tabBar := a.tabBarView()
 	w := a.layoutWidth()
-
 	gapWidth := max(0, w-lipgloss.Width(tabBar))
+	tabH := max(1, lipgloss.Height(tabBar))
+	if gapWidth == 0 {
+		return boxNoWrap(a.styles.Header, tabBar, w, tabH)
+	}
+
 	handle := ""
 	if a.overlay != overlaySidebar {
-		handle = sidebarHandleView(a.styles, false)
+		handle = sidebarHandleView(a.styles)
 	}
-	const chromeRightPad = 2
-	textW := max(0, gapWidth-chromeRightPad)
-	pad := strings.Repeat(" ", chromeRightPad)
-	identity := lipgloss.NewStyle().Inline(true).MaxWidth(textW).Render(a.loggedUserLabel) + pad
-	pills := lipgloss.NewStyle().Inline(true).MaxWidth(max(0, textW-1)).Render(a.providerPillsView()) + pad
-	ruleW := max(0, gapWidth-lipgloss.Width(handle))
-	rule := lipgloss.NewStyle().Foreground(a.styles.th.Border).Render(strings.Repeat("─", ruleW))
-	underline := rule
-	if handle != "" {
-		underline = lipgloss.JoinHorizontal(lipgloss.Bottom, rule, handle)
+	cluster := handle
+	if lipgloss.Width(cluster) > gapWidth {
+		cluster = lipgloss.NewStyle().MaxWidth(gapWidth).MaxHeight(tabH).Render(cluster)
 	}
-	gap := lipgloss.JoinVertical(lipgloss.Right, identity, pills, underline)
-	if gapWidth == 0 {
-		return boxNoWrap(a.styles.Header, tabBar, w, max(1, lipgloss.Height(tabBar)))
+
+	fillW := max(0, gapWidth-lipgloss.Width(cluster))
+	if fillW == 0 {
+		row := lipgloss.JoinHorizontal(lipgloss.Bottom, tabBar, cluster)
+		return boxNoWrap(a.styles.Header, row, w, tabH)
 	}
-	gap = lipgloss.NewStyle().Width(gapWidth).MaxWidth(gapWidth).MaxHeight(lipgloss.Height(gap)).Align(lipgloss.Right).Render(gap)
+	blank := strings.Repeat(" ", fillW)
+	fillLines := make([]string, tabH)
+	for i := range fillLines {
+		fillLines[i] = blank
+	}
+	fillLines[tabH-1] = lipgloss.NewStyle().Foreground(a.styles.th.Border).Render(strings.Repeat("─", fillW))
+	gap := lipgloss.JoinHorizontal(lipgloss.Bottom, lipgloss.JoinVertical(lipgloss.Left, fillLines...), cluster)
 	row := lipgloss.JoinHorizontal(lipgloss.Bottom, tabBar, gap)
-	return boxNoWrap(a.styles.Header, row, w, max(1, lipgloss.Height(row)))
+	return boxNoWrap(a.styles.Header, row, w, tabH)
 }
 
 func (a *App) providerPillsView() string {
@@ -57,21 +61,19 @@ func (a *App) providerPillsView() string {
 	pills := make([]string, 0, len(ids))
 	for _, cp := range ids {
 		var glyph string
-		var glyphStyle lipgloss.Style
 		switch a.svc.GetCloudProviderStatus(cp) {
 		case core.CloudProviderStatusAuthenticated:
-			glyph, glyphStyle = "✓", a.styles.OK
+			glyph = "✓"
 		case core.CloudProviderStatusAuthenticating:
-			glyph, glyphStyle = SpinnerFrames[0], a.styles.Warn
+			glyph = SpinnerFrames[0]
 		case core.CloudProviderStatusError:
-			glyph, glyphStyle = "!", a.styles.Err
+			glyph = "!"
 		default:
-			glyph, glyphStyle = "?", a.styles.Dim
+			glyph = "?"
 		}
-		cpColored := a.styles.Dim.Foreground(ProviderColor(cp)).Render(string(cp))
-		pills = append(pills, cpColored+" "+glyphStyle.Render(glyph))
+		pills = append(pills, string(cp)+" "+glyph)
 	}
-	return strings.Join(pills, a.styles.Dim.Render(" · "))
+	return a.styles.Dim.Render("(" + strings.Join(pills, " · ") + ")")
 }
 
 func tabBorderWithBottom(left, middle, right string) lipgloss.Border {
@@ -108,42 +110,20 @@ func (a *App) tabBarView() string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, rendered...)
 }
 
-func (a *App) filterLineView() string {
-	var chips []string
-	provider := string(a.inv.fProvider)
-	state := string(a.inv.fState)
-	region := string(a.inv.fRegion)
-	query := a.inv.query
-
-	if a.tab == tabInventory {
-		if a.searchMode {
-			chips = append(chips, "/"+a.searchBuf+"▌")
-		} else {
-			if provider != "" {
-				chips = append(chips, "provider: "+provider)
-			}
-			if state != "" && state != "all" {
-				chips = append(chips, "state: "+state)
-			}
-			if region != "" {
-				chips = append(chips, "region: "+region)
-			}
-			if query != "" {
-				chips = append(chips, "/"+query)
-			}
-		}
-	}
-	line := "filters: all"
-	if len(chips) > 0 {
-		line = strings.Join(chips, " · ")
-	}
-	hint := a.styles.Dim.Render(" · " + keyed(a.keys.Inventory.ClearFilters, "clear"))
-	w := a.layoutWidth()
-	return boxNoWrap(a.styles.FilterLine, clipLine(line+hint, w), w, 1)
-}
-
 func (a *App) statusLeftView() string {
 	return a.keys.StatusHint(a.tab)
+}
+
+func (a *App) unreadNotifView() string {
+	n := a.sidebar.notifs.unreadCount()
+	if n < 1 {
+		return ""
+	}
+	label := "Notifications"
+	if n == 1 {
+		label = "Notification"
+	}
+	return a.styles.Accent.Render(itoa(n) + " " + label)
 }
 
 func (a *App) statusRightView() string {
@@ -155,25 +135,37 @@ func (a *App) statusRightView() string {
 			break
 		}
 	}
+
+	parts := []string{}
+	if badge := a.unreadNotifView(); badge != "" {
+		parts = append(parts, badge)
+	}
+
 	sync := "✓ synced"
 	if busy {
 		sync = "syncing…"
 	}
-	// result := fmt.Sprintf("%d/%d vms · %d sess · %s · thm:%s · %d×%d",
-	// 	len(a.inv.filteredVM), len(a.inv.allVM), len(a.sess.sessions), sync, Themes[a.themeIdx].Name, a.width, a.height)
+	parts = append(parts, a.styles.Dim.Render(sync))
 
-	return fmt.Sprintf("%d/%d vms · %d sess · %s",
-		len(a.inv.filteredVM), len(a.inv.allVM), len(a.sess.sessions), sync)
+	if pills := a.providerPillsView(); pills != "" {
+		parts = append(parts, pills)
+	}
+
+	if a.loggedUserLabel != "" {
+		parts = append(parts, a.loggedUserLabel)
+	}
+
+	return strings.Join(parts, a.styles.Dim.Render(" · "))
 }
 
 func (a *App) bottomChromeView() string {
 	w := a.layoutWidth()
-	left := a.statusLeftView()
-	if a.overlay == overlaySidebar {
-		return boxNoWrap(a.styles.StatusBar, clipLine(left, w), w, 1)
+	left := a.styles.Dim.Render(a.statusLeftView())
+	row := clipLine(left, w)
+	if a.overlay != overlaySidebar {
+		row = joinClipRow(left, a.statusRightView(), w)
 	}
-	row := joinClipRow(left, a.statusRightView(), w)
-	return boxNoWrap(a.styles.StatusBar, row, w, 1)
+	return boxNoWrap(a.styles.StatusBar.UnsetForeground(), row, w, 1)
 }
 
 // joinClipRow packs left and right into one w-wide line. Overflow clips the

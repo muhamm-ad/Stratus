@@ -6,7 +6,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/muhamm-ad/stratus/internal/core"
 	"github.com/muhamm-ad/stratus/internal/service"
 	"go.dalton.dog/bubbleup/v2"
@@ -129,10 +128,18 @@ func (a *App) toast(key, message string) tea.Cmd {
 }
 
 func (a *App) notify(key, message string) tea.Cmd {
-	if !a.sidebar.notifs.add(key, message) {
+	isNew := a.sidebar.notifs.add(key, message)
+	a.seeNotifsIfVisible()
+	if !isNew {
 		return nil
 	}
 	return a.toast(key, message)
+}
+
+func (a *App) seeNotifsIfVisible() {
+	if a.overlay == overlaySidebar && a.sidebar.tab == sidebarTabNotif {
+		a.sidebar.notifs.markAllRead()
+	}
 }
 
 func (a *App) log(level, msg string) tea.Cmd {
@@ -380,8 +387,8 @@ func (a *App) appView() string {
 
 	top := a.topChromeView()
 	bottom := a.bottomChromeView()
-	midH := max(1, a.layoutHeight()-lipgloss.Height(top)-lipgloss.Height(bottom))
 	contentW := max(1, a.layoutWidth())
+	layoutH := a.layoutHeight()
 
 	var mid string
 	switch a.tab {
@@ -390,13 +397,10 @@ func (a *App) appView() string {
 	case tabSessions:
 		mid = a.sess.View()
 	}
-	// Stretch the tab body so the status bar stays on the last terminal row
-	// even when that tab's content is shorter than the window. Clip, don't wrap.
-	mid = boxNoWrap(lipgloss.NewStyle(), mid, contentW, midH)
-	upper := lipgloss.JoinVertical(lipgloss.Left, top, mid)
-	if a.tooSmall() || a.overlay != overlayNone {
-		return lipgloss.JoinVertical(lipgloss.Left, upper, bottom)
+	if !a.tooSmall() && a.overlay == overlayNone {
+		// Toasts sit on the tab body so they never cover the status bar.
+		midH := max(1, layoutH-blockHeight(top)-blockHeight(bottom))
+		mid = a.alert.Render(padBlock(mid, contentW, midH))
 	}
-	// Overlay toasts on the content above the status bar so they don't cover it.
-	return lipgloss.JoinVertical(lipgloss.Left, a.alert.Render(upper), bottom)
+	return stackTopMidBottom(top, mid, bottom, contentW, layoutH)
 }

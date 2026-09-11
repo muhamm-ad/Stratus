@@ -20,6 +20,53 @@ func clipLine(s string, cols int) string {
 	return lipgloss.NewStyle().MaxWidth(cols).Render(s)
 }
 
+func blockHeight(s string) int {
+	s = strings.TrimRight(s, "\n")
+	if s == "" {
+		return 0
+	}
+	return lipgloss.Height(s)
+}
+
+// stackTopMidBottom pins top to the first rows and bottom to the last rows.
+// Leftover height goes into mid so it never shows up as padding under the
+// status bar or sidebar footer.
+func stackTopMidBottom(top, mid, bottom string, w, h int) string {
+	if w < 1 {
+		w = 1
+	}
+	if h < 1 {
+		h = 1
+	}
+	top = strings.TrimRight(top, "\n")
+	mid = strings.TrimRight(mid, "\n")
+	bottom = strings.TrimRight(bottom, "\n")
+	topH := blockHeight(top)
+	botH := blockHeight(bottom)
+	if topH+botH >= h {
+		if botH >= h {
+			return padBlock(bottom, w, h)
+		}
+		topH = max(0, h-botH)
+		if topH+botH == h {
+			if topH == 0 {
+				return padBlock(bottom, w, h)
+			}
+			return lipgloss.JoinVertical(lipgloss.Left, padBlock(top, w, topH), padBlock(bottom, w, botH))
+		}
+	}
+	midH := max(1, h-topH-botH)
+	parts := make([]string, 0, 3)
+	if topH > 0 {
+		parts = append(parts, padBlock(top, w, topH))
+	}
+	parts = append(parts, padBlock(mid, w, midH))
+	if botH > 0 {
+		parts = append(parts, padBlock(bottom, w, botH))
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
+}
+
 func padBlock(s string, width, height int) string {
 	if height < 1 {
 		height = 1

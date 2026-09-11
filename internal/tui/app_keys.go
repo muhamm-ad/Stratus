@@ -179,6 +179,7 @@ func (a *App) handleGlobal(act Action) (tea.Model, tea.Cmd) {
 		return a, a.toggleLogAlerts()
 	case ActionSidebar:
 		a.overlay = overlaySidebar
+		a.seeNotifsIfVisible()
 		return a, a.log("INFO", "sidebar")
 	case ActionTheme:
 		a.setTheme((a.themeIdx + 1) % len(Themes))
@@ -420,6 +421,7 @@ func (a *App) updateOverlay(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		switch a.keys.Sidebar.Match(msg) {
 		case ActionSidebarNotif:
 			a.sidebar.setTab(sidebarTabNotif)
+			a.seeNotifsIfVisible()
 		case ActionSidebarLogs:
 			a.sidebar.setTab(sidebarTabLogs)
 		case ActionSidebarSettings:
@@ -516,6 +518,7 @@ func (a *App) runPaletteCommand(c command) tea.Cmd {
 		return a.toggleLogAlerts()
 	case "sidebar":
 		a.overlay = overlaySidebar
+		a.seeNotifsIfVisible()
 	case "help":
 		a.overlay = overlayHelp
 		a.help.scroll = 0
