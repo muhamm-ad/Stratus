@@ -60,6 +60,7 @@ func helpCategories(k KeyMap) []helpCategory {
 		{
 			title: "Inventory",
 			entries: []helpEntry{
+				helpEntryFrom(k.Nav.Enter, "open vm details"),
 				helpEntryFrom(k.Inventory.Mark, "mark this vm"),
 				helpEntryFrom(k.Inventory.MarkAll, "mark all / none"),
 				helpEntryFrom(k.Inventory.Connect, "connect to selection"),
@@ -73,7 +74,7 @@ func helpCategories(k KeyMap) []helpCategory {
 		{
 			title: "Sidebar",
 			entries: []helpEntry{
-				helpEntryFrom(k.Global.Sidebar, "show / hide the sidebar"),
+				helpEntryFrom(k.Global.Sidebar, "show / hide notifications, logs, settings"),
 				helpEntryFrom(k.Sidebar.TabNotif, "notifications tab (while open)"),
 				helpEntryFrom(k.Sidebar.TabLogs, "logs tab (while open)"),
 				helpEntryFrom(k.Sidebar.TabSettings, "settings tab (while open)"),

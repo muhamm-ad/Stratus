@@ -20,8 +20,9 @@ type Styles struct {
 	StatusBar                              lipgloss.Style
 	FilterLine                             lipgloss.Style
 	Box                                    lipgloss.Style // rounded border, surface bg (login)
-	SidePanel                              lipgloss.Style // left-border-only docked pane (vm detail, sessions)
-	Sidebar                                lipgloss.Style // right-docked overlay drawer
+	SidePanel                              lipgloss.Style // left-border-only docked pane (sessions)
+	Sidebar                                lipgloss.Style // right-docked overlay drawer (notif / logs / settings)
+	DetailSidebar                          lipgloss.Style // right-docked overlay drawer (inventory vm details)
 	Cursor                                 lipgloss.Style // ▸ cursor (accent)
 	Marked                                 lipgloss.Style // warn-tinted marked row
 	Dialog                                 lipgloss.Style // overlay chrome: rounded accent border, padded
@@ -60,6 +61,14 @@ func NewStyles(th Theme) Styles {
 		Box:        lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(th.Border).Background(th.Surface).Padding(1, 3),
 		SidePanel:  lipgloss.NewStyle().Border(lipgloss.NormalBorder(), false, false, false, true).BorderForeground(th.Border).Background(th.Surface).Padding(0, 1),
 		Sidebar: lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder(), false, false, false, true).
+			BorderForeground(th.Accent).
+			BorderBackground(th.Bg).
+			Background(th.Bg).
+			Padding(0, 1, 0, 1),
+		// Same edge treatment as Sidebar: accent border on the left so the
+		// drawer reads as sliding in from the right of inventory.
+		DetailSidebar: lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder(), false, false, false, true).
 			BorderForeground(th.Accent).
 			BorderBackground(th.Bg).

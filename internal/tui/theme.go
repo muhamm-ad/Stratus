@@ -7,7 +7,7 @@ import (
 	"github.com/muhamm-ad/stratus/internal/core"
 )
 
-// Theme is a color palette. Stratus ships four themes that the user cycles
+// Theme is a color palette. Stratus ships three themes that the user cycles
 // with ctrl+shift+t. Fixed palettes use hex colors; the "terminal" theme uses
 // lipgloss.NoColor and standard ANSI colors so the emulator's own theme shows
 // through.

@@ -8,7 +8,6 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/table"
 	"charm.land/bubbles/v2/textinput"
-	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/muhamm-ad/stratus/internal/core"
@@ -16,9 +15,11 @@ import (
 	"github.com/muhamm-ad/stratus/internal/service"
 )
 
-// detailPanelWidth is a terminal-column width, not the mockup's 380 CSS
-// pixels — chosen to read well at typical 80-160 col terminal widths.
-const detailPanelWidth = 42
+// detailSidebarWidth is a terminal-column width for the right VM-details
+// drawer. Separate from sidebarWidth (notifications / logs / settings).
+const detailSidebarWidth = 48
+
+const detailLabelWidth = 11
 
 // The query bar language is defined in docs/inventory-query.md and parsed by
 // internal/query — shortcuts only rewrite the string, they do not filter.
@@ -34,8 +35,9 @@ type inventoryModel struct {
 	input         textinput.Model
 	width, height int
 
-	detailOn bool
-	detailVP viewport.Model
+	detailOn     bool
+	detailScroll int
+	detailVMID   string
 }
 
 func newInventoryModel(svc *service.Service, s Styles) inventoryModel {
@@ -46,12 +48,11 @@ func newInventoryModel(svc *service.Service, s Styles) inventoryModel {
 		table.WithStyles(setTableStyles(s)),
 	)
 	return inventoryModel{
-		svc:      svc,
-		styles:   s,
-		marked:   map[string]bool{},
-		tbl:      t,
-		input:    newQueryInput(s),
-		detailVP: viewport.New(),
+		svc:    svc,
+		styles: s,
+		marked: map[string]bool{},
+		tbl:    t,
+		input:  newQueryInput(s),
 	}
 }
 
@@ -105,7 +106,8 @@ func flexNameWidth(tableW, nCols, fixedContent int) int {
 }
 
 // fullTableColumns sizes NAME to the leftover width so the table fills the
-// terminal; PROVIDER/REGION/TYPE/STATE stay fixed on the right.
+// terminal; PROVIDER/REGION/TYPE/STATE stay fixed on the right. The details
+// drawer overlays this table — it does not shrink the column set.
 func fullTableColumns(w int, check string) []table.Column {
 	fixed := invColCheck + invColProvider + invColRegion + invColType + invColState
 	return []table.Column{
@@ -114,19 +116,6 @@ func fullTableColumns(w int, check string) []table.Column {
 		{Title: "PROVIDER", Width: invColProvider},
 		{Title: "REGION", Width: invColRegion},
 		{Title: "TYPE", Width: invColType},
-		{Title: "STATE", Width: invColState},
-	}
-}
-
-// narrowTableColumns drops REGION/TYPE when the detail panel is docked,
-// mirroring the mockup's column-hiding behavior at reduced width. NAME still
-// absorbs leftover space.
-func narrowTableColumns(w int, check string) []table.Column {
-	fixed := invColCheck + invColProvider + invColState
-	return []table.Column{
-		{Title: check, Width: invColCheck}, // select-all ○ / ●
-		{Title: "NAME", Width: flexNameWidth(w, 4, fixed)},
-		{Title: "PROVIDER", Width: invColProvider},
 		{Title: "STATE", Width: invColState},
 	}
 }
@@ -185,6 +174,9 @@ func (m *inventoryModel) mergeProvider(provider core.CloudProviderID, vms []core
 func (m *inventoryModel) recompute() {
 	m.filteredVM = query.Apply(m.allVM, query.Parse(m.input.Value()))
 	m.syncTableRows()
+	if _, ok := m.selectedVM(); !ok {
+		m.detailOn = false
+	}
 }
 
 // syncTableRows rebuilds the table's rows from filteredVM. table.Model.SetRows
@@ -197,6 +189,7 @@ func (m *inventoryModel) syncTableRows() {
 		rows[i] = m.vmToRow(vm, i == m.tbl.Cursor())
 	}
 	m.tbl.SetRows(rows)
+	m.syncDetailVM()
 }
 
 // checkHeaderTitle is ○ unless every visible VM is marked, then ●.
@@ -243,9 +236,6 @@ func (m inventoryModel) vmToRow(vm core.VM, selected bool) table.Row {
 	}
 	name := string(vm.Name)
 	state := stateGlyph(m.styles, vm.State, selected)
-	if m.detailOn {
-		return table.Row{check, name, cloudProvider, state}
-	}
 	return table.Row{check, name, cloudProvider, string(vm.Region), string(vm.Type), state}
 }
 
@@ -253,6 +243,16 @@ func (m *inventoryModel) Update(msg tea.KeyPressMsg, k KeyMap, s Styles) (invent
 	m.SetStyles(s)
 	if m.input.Focused() {
 		return m.updateQuery(msg, k)
+	}
+	if m.detailOn {
+		switch k.Nav.Match(msg) {
+		case ActionPageUp:
+			m.detailScrollBy(-m.detailPageSize())
+			return *m, nil, appIntent{}
+		case ActionPageDown:
+			m.detailScrollBy(m.detailPageSize())
+			return *m, nil, appIntent{}
+		}
 	}
 	act := k.Inventory.Match(msg)
 	if act == ActionNone {
@@ -264,8 +264,8 @@ func (m *inventoryModel) Update(msg tea.KeyPressMsg, k KeyMap, s Styles) (invent
 	if act != ActionNone {
 		return m.Handle(act)
 	}
-	// Movement / paging stays on the table keymap so j/k/pgup match Nav
-	// without a second dispatch table. Mouse later calls Handle directly.
+	// Movement stays on the table keymap so j/k match Nav without a second
+	// dispatch table. Mouse later calls Handle directly.
 	m.tbl, _ = m.tbl.Update(msg)
 	m.syncTableRows()
 	return *m, nil, appIntent{}
@@ -346,12 +346,13 @@ func (m *inventoryModel) Handle(act Action) (inventoryModel, tea.Cmd, appIntent)
 	case ActionSelect:
 		if _, ok := m.selectedVM(); ok {
 			m.detailOn = !m.detailOn
-			m.applyTableLayout()
+			if m.detailOn {
+				m.detailScroll = 0
+			}
 		}
 	case ActionBack:
 		if m.detailOn {
 			m.detailOn = false
-			m.applyTableLayout()
 		}
 	case ActionJumpTop:
 		m.tbl.GotoTop()
@@ -391,6 +392,7 @@ func (m *inventoryModel) Handle(act Action) (inventoryModel, tea.Cmd, appIntent)
 	case ActionSortDir:
 		m.setQuery(m.parsed().ToggleSortDir())
 	case ActionSearch:
+		m.detailOn = false
 		return *m, m.input.Focus(), appIntent{}
 	case ActionQueryHelp:
 		return *m, nil, appIntent{kind: intentQueryHelp}
@@ -500,29 +502,13 @@ func (m *inventoryModel) clearFilters() {
 	m.recompute()
 }
 
-// SetSize stores the available area and resizes the table (and the detail
-// panel, if docked).
+// SetSize stores the available area and resizes the table.
 func (m *inventoryModel) SetSize(w, h int) {
 	m.width, m.height = w, h
 	m.applyTableLayout()
+	m.detailScrollBy(0)
 }
 
-// tableWidth is the full width normally, or the width remaining once the
-// docked detail panel's column is subtracted.
-func (m *inventoryModel) tableWidth() int {
-	if !m.detailOn {
-		return m.width
-	}
-	w := m.width - detailPanelWidth
-	if w < 20 {
-		w = 20
-	}
-	return w
-}
-
-// applyTableLayout resizes the table for the current width/height and swaps
-// its column set (full vs. narrowed) to match whether the detail panel is
-// docked — called on both SetSize and detailOn toggles.
 func (m *inventoryModel) queryBarHeight() int {
 	return 1 + m.styles.FilterLine.GetVerticalFrameSize()
 }
@@ -537,13 +523,8 @@ func (m *inventoryModel) bodyHeight() int {
 
 func (m *inventoryModel) applyTableLayout() {
 	h := m.bodyHeight()
-	w := m.tableWidth()
-	check := m.checkHeaderTitle()
-	if m.detailOn {
-		m.tbl.SetColumns(narrowTableColumns(w, check))
-	} else {
-		m.tbl.SetColumns(fullTableColumns(w, check))
-	}
+	w := max(1, m.width)
+	m.tbl.SetColumns(fullTableColumns(w, m.checkHeaderTitle()))
 	m.tbl.SetWidth(w)
 	// Reserve one row for the inset header rule drawn in tableView.
 	m.tbl.SetHeight(max(1, h-headerRuleHeight))
@@ -551,6 +532,14 @@ func (m *inventoryModel) applyTableLayout() {
 }
 
 func (m *inventoryModel) View() string {
+	main := m.mainView()
+	if vm, ok := m.selectedVM(); m.detailOn && ok {
+		return m.composeDetailSidebar(main, vm)
+	}
+	return main
+}
+
+func (m inventoryModel) mainView() string {
 	bar := m.queryBarView()
 	barH := m.queryBarHeight()
 	if m.height < barH+1 {
@@ -565,12 +554,7 @@ func (m *inventoryModel) View() string {
 		}
 		body = lipgloss.Place(m.width, restH, lipgloss.Left, lipgloss.Top, msg)
 	} else {
-		tableView := m.tableView(m.tableWidth(), restH)
-		if vm, ok := m.selectedVM(); m.detailOn && ok {
-			body = lipgloss.JoinHorizontal(lipgloss.Top, tableView, m.detailPanelView(vm, restH))
-		} else {
-			body = tableView
-		}
+		body = m.tableView(m.width, restH)
 	}
 	return lipgloss.JoinVertical(lipgloss.Top, bar, body)
 }
@@ -614,39 +598,192 @@ func (m *inventoryModel) selectedVM() (core.VM, bool) {
 	return m.filteredVM[c], true
 }
 
-// detailPanelView renders the VM detail as a side panel docked to the right
-// of the table (see App.appView / inventoryModel.View), scrolled via a
-// viewport so long tag lists never clip. The mockup's permission
-// (canConnect) and "recent activity" blocks are dropped: core.VM has no
-// permission field and there's no real audit data to source activity from.
-func (m *inventoryModel) detailPanelView(vm core.VM, height int) string {
-	header := lipgloss.JoinVertical(lipgloss.Left,
-		m.styles.Text.Bold(true).Render(vm.Name)+"  "+stateGlyph(m.styles, vm.State, false),
-		m.styles.Dim.Render(vm.ID),
+func (m *inventoryModel) syncDetailVM() {
+	id := ""
+	if vm, ok := m.selectedVM(); ok {
+		id = vm.ID
+	}
+	if id != m.detailVMID {
+		m.detailVMID = id
+		m.detailScroll = 0
+	}
+}
+
+// composeDetailSidebar draws the VM-details drawer over the right edge of
+// inventory. It is a different overlay from the right-hand notifications /
+// logs / settings sidebar: this one is inventory-only and has no tabs.
+func (m inventoryModel) composeDetailSidebar(background string, vm core.VM) string {
+	w := max(1, m.width)
+	h := max(1, m.height)
+	blurred := blurContent(padBlock(background, w, h), m.styles.Dim)
+	panel := opaqueOverlay(m.detailSidebarView(vm, h), m.styles.th.Bg)
+	px, py := sidebarOrigin(panel, w)
+	comp := lipgloss.NewCompositor(
+		lipgloss.NewLayer(blurred),
+		lipgloss.NewLayer(panel).X(px).Y(py).Z(1),
 	)
+	return lipgloss.NewCanvas(w, h).Compose(comp).Render()
+}
 
-	fields := []string{
-		m.styles.Text.Render("name:    ") + m.styles.Accent.Render(vm.Name),
-		m.styles.Text.Render("id:      ") + m.styles.Dim.Render(vm.ID),
-		m.styles.Text.Render("provider:") + " " + m.styles.Text.Render(string(vm.Provider)),
-		m.styles.Text.Render("region:  ") + m.styles.Text.Render(string(vm.Region)),
-		m.styles.Text.Render("type:    ") + m.styles.Text.Render(string(vm.Type)),
-		m.styles.Text.Render("state:   ") + stateGlyph(m.styles, vm.State, false),
-		m.styles.Text.Render("ip:      ") + m.styles.Cyan.Render(string(vm.PrivateIP)),
-		m.styles.Text.Render("method:  ") + m.styles.Text.Render("unknown (not implemented yet)"),
-		m.styles.Text.Render("tags:    ") + m.styles.Dim.Render(formatTags(vm.Tags)),
+func (m inventoryModel) detailSidebarView(vm core.VM, height int) string {
+	s := m.styles
+	innerW := detailSidebarInnerWidth(s)
+	innerH := max(1, height-s.DetailSidebar.GetVerticalFrameSize())
+
+	header := m.detailHeader(vm, innerW)
+	footer := m.detailFooter(innerW)
+	listH := max(1, innerH-blockHeight(header)-blockHeight(footer))
+
+	body := m.detailBody(vm, innerW)
+	bodyLines := strings.Split(body, "\n")
+	if body == "" {
+		bodyLines = nil
 	}
-	footer := m.styles.Dim.Render("esc/⏎ close")
-
-	innerW := detailPanelWidth - 2 // SidePanel's horizontal padding
-	bodyH := height - lipgloss.Height(header) - lipgloss.Height(footer) - 2
-	if bodyH < 1 {
-		bodyH = 1
+	n := len(bodyLines)
+	scroll := max(0, min(m.detailScroll, max(0, n-listH)))
+	if n > listH {
+		end := min(scroll+listH, n)
+		body = joinScrollbar(strings.Join(bodyLines[scroll:end], "\n"), innerW, listH, n, scroll, s)
 	}
-	m.detailVP.SetWidth(innerW)
-	m.detailVP.SetHeight(bodyH)
-	m.detailVP.SetContent(strings.Join(fields, "\n"))
 
-	body := lipgloss.JoinVertical(lipgloss.Left, header, "", m.detailVP.View(), footer)
-	return boxNoWrap(m.styles.SidePanel, body, detailPanelWidth, height)
+	inner := stackTopMidBottom(header, body, footer, innerW, innerH)
+	return boxNoWrap(s.DetailSidebar.PaddingBottom(0).MarginBottom(0), inner, detailSidebarWidth, height)
+}
+
+func (m inventoryModel) detailHeader(vm core.VM, innerW int) string {
+	s := m.styles
+	title := s.Text.Bold(true).Render("details")
+	name := s.Text.Bold(true).Render(dash(vm.Name)) + "  " + stateGlyph(s, vm.State, false)
+	id := s.Dim.Render(dash(vm.ID))
+	return lipgloss.JoinVertical(lipgloss.Left,
+		title,
+		"",
+		clipLine(name, innerW),
+		clipLine(id, innerW),
+	)
+}
+
+func (m inventoryModel) detailFooter(innerW int) string {
+	hint := "esc/⏎ close"
+	if m.detailBodyOverflows() {
+		hint = "pgup/pgdn scroll · " + hint
+	}
+	return m.styles.Dim.Render(clipLine(hint, innerW))
+}
+
+func (m inventoryModel) detailBody(vm core.VM, innerW int) string {
+	s := m.styles
+	section := func(title string) string { return s.SectionHead.Render(title) }
+	kv := func(label, value string, vs lipgloss.Style) string {
+		return detailField(s, label, value, vs, innerW)
+	}
+	launch := "—"
+	if !vm.LaunchTime.IsZero() {
+		launch = vm.LaunchTime.Local().Format("2006-01-02 15:04")
+	}
+	provider := dash(string(vm.Provider))
+	providerStyle := lipgloss.NewStyle().Foreground(ProviderColor(vm.Provider))
+
+	rows := []string{
+		section("INSTANCE"),
+		kv("name", dash(vm.Name), s.Text),
+		kv("id", dash(vm.ID), s.Dim),
+		kv("provider", provider, providerStyle),
+		kv("region", dash(string(vm.Region)), s.Text),
+		kv("type", dash(string(vm.Type)), s.Text),
+		kv("platform", dash(string(vm.Platform)), s.Text),
+		detailFieldRaw(s, "state", stateGlyph(s, vm.State, false), innerW),
+		kv("launched", launch, s.Dim),
+		"",
+		section("NETWORK"),
+		kv("private ip", dash(string(vm.PrivateIP)), s.Cyan),
+		kv("public ip", dash(string(vm.PublicIP)), s.Cyan),
+		"",
+		section("ACCESS"),
+		kv("user", dash(string(vm.OSUser)), s.Text),
+		kv("method", "not implemented", s.Dim),
+		"",
+		section("TAGS"),
+		kv("tags", formatTags(vm.Tags), s.Dim),
+	}
+	return strings.Join(rows, "\n")
+}
+
+func detailField(s Styles, label, value string, vs lipgloss.Style, innerW int) string {
+	l := s.Dim.Width(detailLabelWidth).Render(label)
+	vw := max(4, innerW-detailLabelWidth-1)
+	wrapped := lipgloss.Wrap(value, vw, "")
+	lines := strings.Split(wrapped, "\n")
+	out := make([]string, len(lines))
+	indent := strings.Repeat(" ", detailLabelWidth+1)
+	for i, line := range lines {
+		styled := vs.Render(line)
+		if i == 0 {
+			out[i] = l + " " + styled
+			continue
+		}
+		out[i] = indent + styled
+	}
+	return strings.Join(out, "\n")
+}
+
+func detailFieldRaw(s Styles, label, renderedValue string, innerW int) string {
+	l := s.Dim.Width(detailLabelWidth).Render(label)
+	vw := max(4, innerW-detailLabelWidth-1)
+	wrapped := lipgloss.Wrap(renderedValue, vw, "")
+	lines := strings.Split(wrapped, "\n")
+	out := make([]string, len(lines))
+	indent := strings.Repeat(" ", detailLabelWidth+1)
+	for i, line := range lines {
+		if i == 0 {
+			out[i] = l + " " + line
+			continue
+		}
+		out[i] = indent + line
+	}
+	return strings.Join(out, "\n")
+}
+
+func detailSidebarInnerWidth(s Styles) int {
+	return max(8, detailSidebarWidth-s.DetailSidebar.GetHorizontalFrameSize())
+}
+
+func (m inventoryModel) detailListHeight() int {
+	innerH := max(1, max(1, m.height)-m.styles.DetailSidebar.GetVerticalFrameSize())
+	headerH := blockHeight(m.detailHeader(core.VM{}, detailSidebarInnerWidth(m.styles)))
+	footerH := 1
+	return max(1, innerH-headerH-footerH)
+}
+
+func (m inventoryModel) detailBodyOverflows() bool {
+	vm, ok := m.selectedVM()
+	if !ok {
+		return false
+	}
+	n := lipgloss.Height(m.detailBody(vm, detailSidebarInnerWidth(m.styles)))
+	return n > m.detailListHeight()
+}
+
+func (m inventoryModel) detailMaxScroll() int {
+	vm, ok := m.selectedVM()
+	if !ok {
+		return 0
+	}
+	n := lipgloss.Height(m.detailBody(vm, detailSidebarInnerWidth(m.styles)))
+	return max(0, n-m.detailListHeight())
+}
+
+func (m inventoryModel) detailPageSize() int {
+	return m.detailListHeight()
+}
+
+func (m *inventoryModel) detailScrollBy(delta int) {
+	m.detailScroll += delta
+	if m.detailScroll < 0 {
+		m.detailScroll = 0
+	}
+	maxScroll := m.detailMaxScroll()
+	if m.detailScroll > maxScroll {
+		m.detailScroll = maxScroll
+	}
 }

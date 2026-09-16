@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -20,9 +21,21 @@ func formatTags(tags map[string]string) string {
 	if len(tags) == 0 {
 		return "—"
 	}
-	var parts []string
-	for k, v := range tags {
-		parts = append(parts, k+":"+v)
+	keys := make([]string, 0, len(tags))
+	for k := range tags {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, k+":"+tags[k])
 	}
 	return strings.Join(parts, " · ")
+}
+
+func dash(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return "—"
+	}
+	return s
 }

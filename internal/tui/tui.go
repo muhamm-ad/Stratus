@@ -71,7 +71,7 @@ type App struct {
 }
 
 func New(svc *service.Service) *App {
-	th := Themes[3]
+	th := Themes[2]
 	a := &App{
 		svc:      svc,
 		keys:     DefaultKeys(),
